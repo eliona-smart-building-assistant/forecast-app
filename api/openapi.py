@@ -75,8 +75,8 @@ def create_api(DATABASE_URL: str) -> FastAPI:
     app = FastAPI(
         title="Forecast App API",
         description="API to manage and query assets in the forecast schema, including hyperparameter search directories.",
-        version="1.0.0",
-        openapi_url="/apps/forecast/api/v1/version/openapi.json",
+        version="1.0.1",
+        openapi_url="/version/openapi.json",
         openapi_version="3.1.0",
     )
     with open("openapi.yaml", "r") as f:

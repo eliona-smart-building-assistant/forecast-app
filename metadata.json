@@ -13,7 +13,7 @@
        "Forecast"
      ],
      "apiUrl": "v1",
-     "apiSpecificationPath": "openapi.yaml",
+     "apiSpecificationPath": "/version/openapi.json",
      "documentationUrl": "https://doc.eliona.io/eliona/referenzen/app-entwicklung",
      "useEnvironment": [ "CONNECTION_STRING", "API_ENDPOINT", "API_TOKEN" ]
    }
