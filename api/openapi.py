@@ -72,7 +72,13 @@ def create_api(DATABASE_URL: str) -> FastAPI:
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
     # FastAPI app instance
-    app = FastAPI()
+    app = FastAPI(
+        title="Forecast App API",
+        description="API to manage and query assets in the forecast schema, including hyperparameter search directories.",
+        version="1.0.0",
+        openapi_url="/apps/forecast/api/v1/version/openapi.json",
+        openapi_version="3.1.0",
+    )
     with open("openapi.yaml", "r") as f:
         openapi_yaml = yaml.safe_load(f)
 
