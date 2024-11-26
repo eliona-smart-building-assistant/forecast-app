@@ -7,8 +7,8 @@ servers:
   - url: "https://{server}/v1"
     variables:
       server:
-        default: device-simulator
-  - url: "https://{environment}.eliona.io/apps/device-simulator/api/v1"
+        default: forecast
+  - url: "https://{environment}.eliona.io/apps/forecast/api/v1/"
     variables:
       environment:
         default: name
