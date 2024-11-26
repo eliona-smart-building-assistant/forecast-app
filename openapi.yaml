@@ -4,7 +4,14 @@ info:
   description: API to manage and query assets in the forecast schema, including hyperparameter search directories.
   version: 1.0.0
 servers:
-  - url: http://localhost:3000
+  - url: "https://{server}/v1"
+    variables:
+      server:
+        default: device-simulator
+  - url: "https://{environment}.eliona.io/apps/device-simulator/api/v1"
+    variables:
+      environment:
+        default: name
 paths:
   /hyperparameter_search/{directory_name}:
     delete:

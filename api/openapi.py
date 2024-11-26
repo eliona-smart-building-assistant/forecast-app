@@ -8,6 +8,7 @@ import os
 import shutil
 from sqlalchemy.engine import Row
 import base64
+import yaml
 
 
 # Pydantic model for the 'assets_to_forecast' table
@@ -72,6 +73,14 @@ def create_api(DATABASE_URL: str) -> FastAPI:
 
     # FastAPI app instance
     app = FastAPI()
+    with open("openapi.yaml", "r") as f:
+        openapi_yaml = yaml.safe_load(f)
+
+    def custom_openapi():
+        app.openapi_schema = openapi_yaml
+        return app.openapi_schema
+
+    app.openapi = custom_openapi
 
     # Dependency to get DB session
     def get_db():
