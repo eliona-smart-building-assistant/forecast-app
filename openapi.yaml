@@ -1,27 +1,8 @@
 openapi: 3.1.0
-
-#  This file is part of the Eliona project.
-#  Copyright © 2024 IoTEC AG. All Rights Reserved.
-#  ______ _ _
-# |  ____| (_)
-# | |__  | |_  ___  _ __   __ _
-# |  __| | | |/ _ \| '_ \ / _` |
-# | |____| | | (_) | | | | (_| |
-# |______|_|_|\___/|_| |_|\__,_|
-#
-#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
-#  BUT NOT LIMITED  TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-#  NON INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-#  DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 info:
-  version: 1.0.1
   title: Forecast App API
   description: API to manage and query assets in the forecast schema, including hyperparameter search directories.
-externalDocs:
-  description: Find out more about the Forecast App API
-  url: https://github.com/eliona-smart-building-assistant/forecast-app
+  version: 1.0.0
 servers:
   - url: "https://{server}/v1"
     variables:
@@ -31,22 +12,9 @@ servers:
     variables:
       environment:
         default: name
-
-tags:
-  - name: Hyperparameter Search
-    description: Endpoints related to hyperparameter search directories
-    externalDocs:
-      url: https://github.com/eliona-smart-building-assistant/forecast-app
-  - name: Assets
-    description: Endpoints related to assets
-    externalDocs:
-      url: https://github.com/eliona-smart-building-assistant/forecast-app
-
 paths:
   /hyperparameter_search/{directory_name}:
     delete:
-      tags:
-        - Hyperparameter Search
       summary: Delete hyperparameter search directory
       description: Deletes a hyperparameter search directory by name.
       operationId: delete_hyperparameter_search
@@ -72,8 +40,6 @@ paths:
           description: Error deleting directory.
   /hyperparameter_search:
     get:
-      tags:
-        - Hyperparameter Search
       summary: List hyperparameter search directories
       description: Retrieves a list of hyperparameter search directories from the base path.
       operationId: list_hyperparameter_search_directories
@@ -90,8 +56,6 @@ paths:
           description: Error listing directories.
   /assets:
     get:
-      tags:
-        - Assets
       summary: List assets
       description: Retrieves a paginated list of assets.
       operationId: read_assets
@@ -120,8 +84,6 @@ paths:
         '500':
           description: Error retrieving assets.
     post:
-      tags:
-        - Assets
       summary: Create an asset
       description: Creates a new asset in the forecast schema.
       operationId: create_asset
@@ -142,8 +104,6 @@ paths:
           description: Error creating asset.
   /assets/search:
     get:
-      tags:
-        - Assets
       summary: Get asset by GAI, target attribute, and forecast length
       description: Retrieves a specific asset by its GAI, target attribute, and forecast length.
       operationId: read_asset_by_gai_target_forecast
@@ -176,8 +136,6 @@ paths:
           description: Error retrieving asset.
   /assets/{id}:
     get:
-      tags:
-        - Assets
       summary: Get asset by ID
       description: Retrieves a specific asset by its ID.
       operationId: read_asset
@@ -199,8 +157,6 @@ paths:
         '500':
           description: Error retrieving asset.
     put:
-      tags:
-        - Assets
       summary: Update asset by ID
       description: Updates an existing asset by its ID.
       operationId: update_asset
@@ -228,8 +184,6 @@ paths:
         '500':
           description: Error updating asset.
     delete:
-      tags:
-        - Assets
       summary: Delete asset by ID
       description: Deletes an asset by its ID.
       operationId: delete_asset
@@ -252,8 +206,6 @@ paths:
           description: Error deleting asset.
   /assets/gai/{gai}:
     get:
-      tags:
-        - Assets
       summary: Get asset by GAI
       description: Retrieves an asset by its GAI (Global Asset Identifier).
       operationId: read_asset_by_gai
@@ -274,7 +226,6 @@ paths:
           description: Asset not found.
         '500':
           description: Error retrieving asset.
-
 components:
   schemas:
     AssetModel:
