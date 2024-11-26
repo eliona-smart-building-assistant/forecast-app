@@ -1,0 +1,19 @@
+{
+    "name": "Forecast",
+    "elionaMinVersion": "v11.0.0",  
+     "displayName": {
+       "en": "App forecast",
+       "de": "App Prognose"
+     },
+     "description": {
+       "en": "With this app, one can select attributes and features to forecast any number steps into the future.",
+       "de": "Mit dieser App kann man Attribute und Features auswählen, um beliebig viele Schritte in die Zukunft zu prognostizieren."
+     },
+     "dashboardTemplateNames": [
+       "Forecast"
+     ],
+     "apiUrl": "v1",
+     "apiSpecificationPath": "/version/openapi.json",
+     "documentationUrl": "https://doc.eliona.io/eliona/referenzen/app-entwicklung",
+     "useEnvironment": [ "CONNECTION_STRING", "API_ENDPOINT", "API_TOKEN" ]
+   }

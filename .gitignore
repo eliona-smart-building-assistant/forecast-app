@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Virtual environment directories
+venv/
+.venv/
+
+# VS Code settings
+.vscode/
+
+# Environment variables
+.env
+keys.txt
+ 
+  
+# Other files to ignore
+*.pyc
+.DS_Store

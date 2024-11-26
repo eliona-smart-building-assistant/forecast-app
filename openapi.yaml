@@ -1,0 +1,277 @@
+openapi: 3.1.0
+info:
+  title: Forecast App API
+  description: API to manage and query assets in the forecast schema, including hyperparameter search directories.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /hyperparameter_search/{directory_name}:
+    delete:
+      summary: Delete hyperparameter search directory
+      description: Deletes a hyperparameter search directory by name.
+      operationId: delete_hyperparameter_search
+      parameters:
+        - name: directory_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Directory deleted successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Directory not found.
+        '500':
+          description: Error deleting directory.
+  /hyperparameter_search:
+    get:
+      summary: List hyperparameter search directories
+      description: Retrieves a list of hyperparameter search directories from the base path.
+      operationId: list_hyperparameter_search_directories
+      responses:
+        '200':
+          description: Successfully retrieved directories.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '500':
+          description: Error listing directories.
+  /assets:
+    get:
+      summary: List assets
+      description: Retrieves a paginated list of assets.
+      operationId: read_assets
+      parameters:
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of items to skip.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Maximum number of items to return.
+      responses:
+        '200':
+          description: Successfully retrieved assets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetModel'
+        '500':
+          description: Error retrieving assets.
+    post:
+      summary: Create an asset
+      description: Creates a new asset in the forecast schema.
+      operationId: create_asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetModel'
+      responses:
+        '201':
+          description: Successfully created asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetModel'
+        '500':
+          description: Error creating asset.
+  /assets/search:
+    get:
+      summary: Get asset by GAI, target attribute, and forecast length
+      description: Retrieves a specific asset by its GAI, target attribute, and forecast length.
+      operationId: read_asset_by_gai_target_forecast
+      parameters:
+        - name: gai
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: target_attribute
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: forecast_length
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successfully retrieved asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetModel'
+        '404':
+          description: Asset not found.
+        '500':
+          description: Error retrieving asset.
+  /assets/{id}:
+    get:
+      summary: Get asset by ID
+      description: Retrieves a specific asset by its ID.
+      operationId: read_asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successfully retrieved asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetModel'
+        '404':
+          description: Asset not found.
+        '500':
+          description: Error retrieving asset.
+    put:
+      summary: Update asset by ID
+      description: Updates an existing asset by its ID.
+      operationId: update_asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetModel'
+      responses:
+        '200':
+          description: Successfully updated asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetModel'
+        '404':
+          description: Asset not found.
+        '500':
+          description: Error updating asset.
+    delete:
+      summary: Delete asset by ID
+      description: Deletes an asset by its ID.
+      operationId: delete_asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successfully deleted asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetModel'
+        '404':
+          description: Asset not found.
+        '500':
+          description: Error deleting asset.
+  /assets/gai/{gai}:
+    get:
+      summary: Get asset by GAI
+      description: Retrieves an asset by its GAI (Global Asset Identifier).
+      operationId: read_asset_by_gai
+      parameters:
+        - name: gai
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully retrieved asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetModel'
+        '404':
+          description: Asset not found.
+        '500':
+          description: Error retrieving asset.
+components:
+  schemas:
+    AssetModel:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        gai:
+          type: string
+        target_attribute:
+          type: string
+        feature_attributes:
+          type: array
+          items:
+            type: string
+        forecast_length:
+          type: integer
+        start_date:
+          type: string
+          format: date
+          nullable: true
+        parameters:
+          type: object
+          nullable: true
+        datalength:
+          type: integer
+          nullable: true
+        hyperparameters:
+          type: object
+          nullable: true
+        trainingparameters:
+          type: object
+          nullable: true
+        latest_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        context_length:
+          type: integer
+          nullable: true
+        processing_status:
+          type: string
+          nullable: true
+        scaler:
+          type: string
+          format: byte
+          nullable: true
+        state:
+          type: string
+          format: byte
+          nullable: true
+      required:
+        - gai
+        - target_attribute
+        - forecast_length
