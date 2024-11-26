@@ -12,7 +12,7 @@ COPY requirements.txt .
 
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
-
+ENV HYPERPARAMETER_SEARCH_PATH=/app/hyperparameter_search
 COPY . .
 
 EXPOSE 3000

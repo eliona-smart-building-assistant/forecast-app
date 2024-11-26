@@ -1,5 +1,5 @@
 # FILE: api/openapi.py
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from pydantic import BaseModel
 from typing import Optional, List  # Import Optional for making fields optional
 from sqlalchemy import MetaData, Table, create_engine
@@ -9,6 +9,8 @@ import shutil
 from sqlalchemy.engine import Row
 import base64
 import yaml
+
+BASE_PATH = os.getenv("HYPERPARAMETER_SEARCH_PATH", "./hyperparameter_search")
 
 
 # Pydantic model for the 'assets_to_forecast' table
@@ -79,6 +81,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         openapi_url="/v1/version/openapi.json",
         openapi_version="3.1.0",
     )
+
     with open("openapi.yaml", "r") as f:
         openapi_yaml = yaml.safe_load(f)
 
@@ -96,12 +99,9 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         finally:
             db.close()
 
-    @app.delete("/hyperparameter_search/{directory_name}", response_model=dict)
+    @app.delete("/v1/hyperparameter_search/{directory_name}", response_model=dict)
     def delete_hyperparameter_search(directory_name: str):
-        base_path = (
-            "C:/Users/sti/eliona/pythonscriptesting/forecast-app/hyperparameter_search"
-        )
-        directory_path = os.path.join(base_path, directory_name)
+        directory_path = os.path.join(BASE_PATH, directory_name)
 
         if not os.path.exists(directory_path):
             raise HTTPException(status_code=404, detail="Directory not found")
@@ -114,16 +114,14 @@ def create_api(DATABASE_URL: str) -> FastAPI:
                 status_code=500, detail=f"Error deleting directory: {e}"
             )
 
-    @app.get("/hyperparameter_search", response_model=list)
+    @app.get("/v1/hyperparameter_search", response_model=list)
     def list_hyperparameter_search_directories():
-        base_path = (
-            "C:/Users/sti/eliona/pythonscriptesting/forecast-app/hyperparameter_search"
-        )
+
         try:
             directories = [
                 d
-                for d in os.listdir(base_path)
-                if os.path.isdir(os.path.join(base_path, d))
+                for d in os.listdir(BASE_PATH)
+                if os.path.isdir(os.path.join(BASE_PATH, d))
             ]
             return directories
         except Exception as e:
@@ -132,7 +130,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             )
 
     # API to get all assets
-    @app.get("/assets", response_model=list[AssetModel])
+    @app.get("/v1/assets", response_model=list[AssetModel])
     def read_assets(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
         result = db.execute(Asset.select().offset(skip).limit(limit))
         assets = result.fetchall()
@@ -142,7 +140,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
 
         return assets_list
 
-    @app.get("/assets/search", response_model=AssetModel)
+    @app.get("/v1/assets/search", response_model=AssetModel)
     def read_asset_by_gai_target_forecast(
         gai: str,
         target_attribute: str,
@@ -165,14 +163,14 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         return AssetModel.from_orm(result)
 
     # API to get an asset by ID
-    @app.get("/assets/{id}", response_model=AssetModel)
+    @app.get("/v1/assets/{id}", response_model=AssetModel)
     def read_asset(id: int, db: Session = Depends(get_db)):
         result = db.execute(Asset.select().where(Asset.c.id == id)).first()
         if result is None:
             raise HTTPException(status_code=404, detail="Asset not found")
         return AssetModel.from_orm(result)
 
-    @app.get("/assets/gai/{gai}", response_model=AssetModel)
+    @app.get("/v1/assets/gai/{gai}", response_model=AssetModel)
     def read_asset_by_gai(gai: str, db: Session = Depends(get_db)):
         result = db.execute(Asset.select().where(Asset.c.gai == gai)).first()
         if result is None:
@@ -182,7 +180,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         return AssetModel.from_orm(result)
 
     # API to create a new asset
-    @app.post("/assets", response_model=AssetModel)
+    @app.post("/v1/assets", response_model=AssetModel)
     def create_asset(asset: AssetModel, db: Session = Depends(get_db)):
         # Convert the AssetModel to a dictionary suitable for the database
         db_asset = asset.to_db_model()
@@ -212,7 +210,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Error creating asset: {e}")
 
     # API to update an existing asset
-    @app.put("/assets/{id}", response_model=AssetModel)
+    @app.put("/v1/assets/{id}", response_model=AssetModel)
     def update_asset(id: int, asset: AssetModel, db: Session = Depends(get_db)):
         db_asset = db.execute(Asset.select().where(Asset.c.id == id)).first()
         if db_asset is None:
@@ -241,7 +239,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Error updating asset: {e}")
 
     # API to delete an asset by ID
-    @app.delete("/assets/{id}", response_model=AssetModel)
+    @app.delete("/v1/assets/{id}", response_model=AssetModel)
     def delete_asset(id: int, db: Session = Depends(get_db)):
         db_asset = db.execute(Asset.select().where(Asset.c.id == id)).first()
         if db_asset is None:
