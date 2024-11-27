@@ -223,7 +223,7 @@ def forecast(asset_details, asset_id):
             with process_lock:
                 if (current_time - last_processed_time) >= 5:
                     last_processed_time = current_time
-                    logger.info("Received message:", {message})
+                    logger.info(f"Recieved message:{message}")
                     try:
                         if (
                             get_asset_by_id(SessionLocal, Asset, id=asset_details["id"])

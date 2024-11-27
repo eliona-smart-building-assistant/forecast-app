@@ -13,10 +13,9 @@ COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 ENV HYPERPARAMETER_SEARCH_PATH=/tmp/hyperparameter_search
-RUN mkdir -p /app/temp/hyperparameter_search
 
-# Set permissions (adjust as necessary)
-RUN chmod -R 755 /app/temp/hyperparameter_search
+RUN mkdir -p /tmp/hyperparameter_search
+
 
 COPY . .
 
