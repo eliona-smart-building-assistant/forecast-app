@@ -17,3 +17,4 @@ keys.txt
 # Other files to ignore
 *.pyc
 .DS_Store
+tmp/
