@@ -91,7 +91,7 @@ def train_lstm_model(
             hypermodel,
             objective=objective,
             max_trials=max_trials,
-            directory="temp/hyperparameter_search",
+            directory="/tmp/hyperparameter_search",
             project_name=project_name,
             max_retries_per_trial=0,  # Prevent retries
             max_consecutive_failed_trials=50,
