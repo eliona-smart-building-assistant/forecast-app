@@ -14,5 +14,5 @@ def Initialize():
         apps_api.patch_app_by_name("forecast", True)
         logger.info("App 'forecast' registered.")
 
-    # else:
-    #     logger.info("App 'forecast' already active.")
+    else:
+        logger.info("App 'forecast' already active.")

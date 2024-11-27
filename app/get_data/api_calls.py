@@ -70,7 +70,7 @@ def printState(model):
 
 def save_latest_timestamp(SessionLocal, Asset, timestamp, tz, asset_details):
     logger.info("Updating latest timestamp")
-    logger.info(timestamp)
+    logger.info(f"{timestamp}")
     if isinstance(timestamp, datetime) and timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=tz)
     elif isinstance(timestamp, np.datetime64):
@@ -125,9 +125,9 @@ def save_scaler(SessionLocal, Asset, scaler, asset_details):
     """
     # Serialize the scaler using pickle
     logger.info("Saving scaler")
-    logger.info(scaler)
+    logger.info(f"{scaler}")
     serialized_scaler = pickle.dumps(scaler)
-    logger.info(serialized_scaler)
+    logger.info(f"{serialized_scaler}")
     update_asset(
         SessionLocal,
         Asset,

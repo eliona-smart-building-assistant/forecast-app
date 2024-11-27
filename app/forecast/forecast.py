@@ -90,13 +90,13 @@ def forecast(asset_details, asset_id):
             context_length = load_contextlength(SessionLocal, Asset, asset_details)
 
             new_end_date = datetime.now(tz)
-            logger.info("timestep_in_file", timestep_in_file)
+            logger.info(f"timestep_in_file {timestep_in_file}")
             new_start_date = (timestep_in_file - timestamp_diff_buffer * 10).astimezone(
                 tz
             )
 
-            logger.info("new_start_date", new_start_date)
-            logger.info("timestamp_diff_buffer", timestamp_diff_buffer)
+            logger.info(f"new_start_date {new_start_date}")
+            logger.info(f"timestamp_diff_buffer {timestamp_diff_buffer}")
 
             df = fetch_pandas_data(
                 asset_id, new_start_date, new_end_date, target_column, feature_columns
@@ -130,7 +130,7 @@ def forecast(asset_details, asset_id):
                 logger.info(
                     f"Updating model's state with {len(X_update)} new X sequences."
                 )
-                logger.info("First sequences from forecasting data:", X_update[:3])
+                logger.info(f"First sequences from forecasting data: {X_update[:3]}")
                 for i in range(len(X_update)):
                     x = X_update[i].reshape(
                         (1, context_length, X_update.shape[2])
@@ -142,14 +142,14 @@ def forecast(asset_details, asset_id):
 
             # Forecast the next y using X_last
             if X_last is not None:
-                logger.info("last x sequence:", X_last)
+                logger.info(f"last x sequence: {X_last}")
                 logger.info("Forecasting the next value using the latest X sequence.")
                 next_prediction_scaled = model.predict(X_last, batch_size=batch_size)
                 next_prediction = scaler[target_column].inverse_transform(
                     next_prediction_scaled
                 )
-                logger.info("Next prediction:", next_prediction[0][0])
-                logger.info("Predicted next timestamp:", new_next_timestamp)
+                logger.info(f"Next prediction: {next_prediction[0][0]}")
+                logger.info(f"Predicted next timestamp: {new_next_timestamp}")
 
                 # Write prediction into Eliona
                 write_into_eliona(
@@ -213,8 +213,8 @@ def forecast(asset_details, asset_id):
 
         logger.info("Connecting to WebSocket...")
         websocket_url = base_websocket_url  # Reassign in case it changes
-        logger.info("WebSocket URL:", websocket_url)
-        logger.info("Headers:", headers)
+        logger.info(f"WebSocket URL: {websocket_url}")
+        logger.info(f"Headers: {headers}")
 
         def on_message(ws, message):
 
@@ -223,7 +223,7 @@ def forecast(asset_details, asset_id):
             with process_lock:
                 if (current_time - last_processed_time) >= 5:
                     last_processed_time = current_time
-                    logger.info("Received message:", message)
+                    logger.info("Received message:", {message})
                     try:
                         if (
                             get_asset_by_id(SessionLocal, Asset, id=asset_details["id"])
@@ -233,14 +233,14 @@ def forecast(asset_details, asset_id):
                             sys.exit()
                         perform_forecast()
                     except Exception as e:
-                        logger.info("Error processing message:", e)
+                        logger.info(f"Error processing message: {e}")
                 else:
                     logger.info(
                         "Received message within 5 seconds of the last one. Ignoring."
                     )
 
         def on_error(ws, error):
-            logger.info("WebSocket error:", error)
+            logger.info(f"WebSocket error: {error}")
 
         def on_close(ws, close_status_code, close_msg):
             logger.info(
@@ -271,7 +271,7 @@ def forecast(asset_details, asset_id):
             logger.info("WebSocket connection closed by user.")
             break
         except Exception as e:
-            logger.info("Exception occurred: ", e)
+            logger.info(f"Exception occurred: {e}")
 
         # Reconnection logic
         logger.info(f"Reconnecting in {reconnect_delay} seconds...")

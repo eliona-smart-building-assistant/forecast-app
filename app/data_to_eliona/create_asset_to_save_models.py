@@ -30,7 +30,7 @@ def create_asset_to_save_models():
         )
 
         asset = assets_api.put_asset(asset)
-        logger.info(asset)
+        logger.info(f"{asset}")
         return asset
 
 

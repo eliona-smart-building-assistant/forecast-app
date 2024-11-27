@@ -287,8 +287,8 @@ def prepare_data(
     # Extract the last Y's timestamp
     last_timestamp = data["timestamp"].iloc[len(data) - forecast_length]
     last_timestamp = pd.to_datetime(last_timestamp)
-    logger.info("X_shape", X.shape)
-    logger.info("Y_shape", Y.shape)
+    logger.info(f"X_shape {X.shape}")
+    logger.info(f"Y_shape {Y.shape}")
     return X, Y, scalers, last_timestamp
 
 
@@ -345,11 +345,11 @@ def prepare_data_for_forecast(
     if len(indices) == 0:
         logger.info("No new data available after the last timestamp.")
         return None, None, None, None
-    logger.info("iding indices[0]", indices[:5])
+    logger.info(f"iding indices[0] {indices[:5]}")
     last_index = indices[0]
-    logger.info("last_timestamp", last_timestamp)
-    logger.info("last_index", last_index)
-    logger.info("timesamp at last_index", data["timestamp"].iloc[last_index])
+    logger.info(f"last_timestamp {last_timestamp}")
+    logger.info(f"last_index {last_index}")
+    logger.info(f"timestamp at last_index {data['timestamp'].iloc[last_index]}")
     # Start index to include context_length steps before last_index
     start_index = last_index - context_length
     if start_index < 0:
@@ -390,6 +390,6 @@ def prepare_data_for_forecast(
     else:
         new_next_timestamp = None
         logger.info("Insufficient data for timestamp calculation.")
-    logger.info("X_update_shape", X_update.shape)
-    logger.info("X_last_shape", X_last.shape)
+    logger.info(f"X_update_shape {X_update.shape}")
+    logger.info(f"X_last_shape {X_last.shape}")
     return X_update, X_last, new_next_timestamp, last_y_timestamp_new

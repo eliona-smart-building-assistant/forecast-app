@@ -22,7 +22,7 @@ def write_into_eliona(asset_id, timestamp, data, name, prediction_length):
 
         forecast_name_suffix = f"{name}_forecast_{prediction_length}"
         data_dict = {f"{forecast_name_suffix}": float(data)}
-        logger.info(data_dict)
+        logger.info(f"{data_dict}")
 
         # Ensure timestamp is in ISO format with timezone
         if isinstance(timestamp, pd.Timestamp):
@@ -38,7 +38,7 @@ def write_into_eliona(asset_id, timestamp, data, name, prediction_length):
         data = Data(
             asset_id=asset_id, subtype="output", timestamp=timestamp, data=data_dict
         )
-        logger.info(data)
+        logger.info(f"{data}")
 
         # Send the data to the API
         data_api.put_data(data, direct_mode="true")

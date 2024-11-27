@@ -62,10 +62,10 @@ def train_lstm_model(
 
     save_scaler(SessionLocal, Asset, scaler, asset_details)
 
-    logger.info("X tail training: %s", X[-3:])
-    logger.info("y tail training: %s", y[-3:])
-    logger.info("X shape: %s", X.shape)
-    logger.info("y shape: %s", y.shape)
+    logger.info(f"X tail training: {X[-3:]}")
+    logger.info(f"y tail training: {y[-3:]}")
+    logger.info(f"X shape: {X.shape}")
+    logger.info(f"y shape: {y.shape}")
     # Split the data
     num_features = X.shape[2]
     if hyperparameters or ((not hyperparameters) and (not parameters)):
@@ -184,9 +184,9 @@ def train_lstm_model(
                 best_hyperparameters = hyperparameters
 
         logger.info("Best hyperparameters after testing on new data:")
-        logger.info(best_hyperparameters)
+        logger.info(f"{best_hyperparameters}")
         logger.info("Best hyperparameters values:")
-        logger.info(best_hyperparameters.values)
+        logger.info(f"{best_hyperparameters.values}")
         validation_samples = int(len(X) * validation_split)
         if validation_samples == 0:
             logger.info(

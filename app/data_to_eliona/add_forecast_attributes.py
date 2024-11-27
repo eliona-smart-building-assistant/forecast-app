@@ -95,7 +95,7 @@ def add_attribute_to_asset_type(asset_type_name, attribute_info):
         logger.info(
             f"Successfully added attribute '{attribute.name}' to asset type '{asset_type_name}'."
         )
-        logger.info(api_response)
+        logger.info(f"{api_response}")
     except ApiException as e:
         logger.info(
             f"Exception when calling AssetTypesApi->post_asset_type_attribute: {e}"
