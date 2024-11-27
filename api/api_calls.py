@@ -67,7 +67,7 @@ def get_asset_by_id(SessionLocal, Asset, id: int):
         query = Asset.select().where(Asset.c.id == id)
         result = session.execute(query).first()
         if result is None:
-            raise ValueError(f"Asset with ID {id} not found.")
+            logging.warning(f"Asset with ID {id} not found.")
         return result
 
 
