@@ -7,6 +7,7 @@ import base64
 import tempfile
 import mimetypes
 import logging
+import time
 
 # Initialize the logger
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ def get_asset_info_and_attachments(asset_id):
             return None
 
 
-def save_model_to_eliona(model, file_name):
+def save_model_to_eliona(model, file_name, max_retries=3, backoff_factor=2):
     """
     Adds a serialized TensorFlow model as an attachment to a specified Eliona asset.
     If an attachment with the same name exists, it replaces it.
@@ -54,6 +55,8 @@ def save_model_to_eliona(model, file_name):
     Args:
         model (tf.keras.Model): The TensorFlow model to attach.
         file_name (str): The name to assign to the attachment.
+        max_retries (int): Maximum number of retry attempts.
+        backoff_factor (int): Factor by which the wait time increases after each retry.
     """
     gai = "forecast_models"
     asset_id = get_asset_id_by_gai(gai)
@@ -79,58 +82,100 @@ def save_model_to_eliona(model, file_name):
         content=encoded_content,
     )
 
-    with ApiClient(configuration) as api_client:
-        assets_api = AssetsApi(api_client)
+    attempt = 0
+    while attempt < max_retries:
         try:
-            # Retrieve the existing asset with attachments
-            asset = assets_api.get_asset_by_id(
-                asset_id=asset_id, expansions=["Asset.attachments"]
-            )
-
-            # Initialize attachments list if necessary
-            if asset.attachments is None:
-                asset.attachments = []
-
-            # Check for existing attachment with the same name
-            existing_attachments = [
-                att for att in asset.attachments if att.name == file_name
-            ]
-
-            if existing_attachments:
-                # Replace the existing attachment
-                for existing_att in existing_attachments:
-                    asset.attachments.remove(existing_att)
-                asset.attachments.append(attachment)
-                logger.info(
-                    f"Replaced existing attachment '{attachment.name}' in asset ID {asset_id}."
+            with ApiClient(configuration) as api_client:
+                assets_api = AssetsApi(api_client)
+                # Retrieve the existing asset with attachments
+                asset = assets_api.get_asset_by_id(
+                    asset_id=asset_id, expansions=["Asset.attachments"]
                 )
+
+                # Initialize attachments list if necessary
+                if asset.attachments is None:
+                    asset.attachments = []
+
+                # Check for existing attachment with the same name
+                existing_attachments = [
+                    att for att in asset.attachments if att.name == file_name
+                ]
+
+                if existing_attachments:
+                    # Replace the existing attachment
+                    for existing_att in existing_attachments:
+                        asset.attachments.remove(existing_att)
+                    asset.attachments.append(attachment)
+                    logger.info(
+                        f"Replaced existing attachment '{attachment.name}' in asset ID {asset_id}."
+                    )
+                else:
+                    # Add the new attachment
+                    asset.attachments.append(attachment)
+                    logger.info(
+                        f"Added new attachment '{attachment.name}' to asset ID {asset_id}."
+                    )
+
+                # Update the asset with the new attachments list
+                updated_asset = assets_api.put_asset_by_id(
+                    asset_id=asset_id, asset=asset, expansions=["Asset.attachments"]
+                )
+                logger.info(
+                    f"Successfully updated attachments for asset ID {asset_id}."
+                )
+                return  # Exit after successful execution
+
+        except ApiException as e:
+            attempt += 1
+            logger.warning(f"Attempt {attempt} - Error adding attachment: {e}")
+            if attempt < max_retries:
+                sleep_time = backoff_factor**attempt
+                logger.info(f"Retrying in {sleep_time} seconds...")
+                time.sleep(sleep_time)
             else:
-                # Add the new attachment
-                asset.attachments.append(attachment)
-                logger.info(
-                    f"Added new attachment '{attachment.name}' to asset ID {asset_id}."
+                logger.error(
+                    f"Max retries exceeded for adding attachment to asset ID {asset_id}."
                 )
-
-            # Update the asset with the new attachments list
-            updated_asset = assets_api.put_asset_by_id(
-                asset_id=asset_id, asset=asset, expansions=["Asset.attachments"]
-            )
-        except ApiException as e:
-            logger.info(f"Error adding attachment: {e}")
+                return
 
 
-def get_asset_id_by_gai(gai):
-    with ApiClient(configuration) as api_client:
-        assets_api = AssetsApi(api_client)
+def get_asset_id_by_gai(gai, max_retries=5, backoff_factor=2):
+    """
+    Fetches the asset ID by its Global Asset Identifier (GAI) with retry logic.
+
+    Args:
+        gai (str): Global Asset Identifier.
+        max_retries (int): Maximum number of retry attempts.
+        backoff_factor (int): Factor by which the wait time increases after each retry.
+
+    Returns:
+        int or None: The asset ID if found, else None.
+    """
+    attempt = 0
+    sleep_time = 1
+    while attempt < max_retries:
         try:
-            assets = assets_api.get_assets()
-            for asset in assets:
-                if asset.global_asset_identifier == gai:
-                    return asset.id
-            return asset.id
+            with ApiClient(configuration) as api_client:
+                assets_api = AssetsApi(api_client)
+                assets = assets_api.get_assets()
+                for asset in assets:
+                    if asset.global_asset_identifier == gai:
+                        logging.info(f"Found asset ID {asset.id} for GAI {gai}")
+                        return asset.id
+                logging.warning(f"Asset with GAI {gai} not found.")
+                return None
         except ApiException as e:
-            logger.info(f"Exception when calling AssetsApi->get_asset_by_gai: {e}")
-            return None
+            attempt += 1
+            logging.warning(
+                f"Attempt {attempt} - Exception when calling AssetsApi->get_asset_by_gai: {e}"
+            )
+            if attempt < max_retries:
+                sleep_time = backoff_factor**attempt
+                logging.info(f"Retrying in {sleep_time} seconds...")
+                time.sleep(sleep_time)
+            else:
+                logging.error(f"Max retries exceeded for GAI {gai}.")
+                return None
 
 
 def delete_file(file_path):
