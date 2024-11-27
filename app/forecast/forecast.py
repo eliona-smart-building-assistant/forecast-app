@@ -190,9 +190,17 @@ def forecast(asset_details, asset_id):
         return
 
     # Ensure ELIONA_HOST uses wss:// and includes /api/v2
-    base_websocket_url = (
-        ELIONA_HOST.replace("https://", "wss://").rstrip("/") + "/data-listener"
-    )
+    if ELIONA_HOST.startswith("https://"):
+        base_websocket_url = (
+            ELIONA_HOST.replace("https://", "wss://").rstrip("/") + "/data-listener"
+        )
+    elif ELIONA_HOST.startswith("http://"):
+        base_websocket_url = (
+            ELIONA_HOST.replace("http://", "ws://").rstrip("/") + "/data-listener"
+        )
+    else:
+        # If no scheme is provided, assume 'ws://'
+        base_websocket_url = "ws://" + ELIONA_HOST.rstrip("/") + "/data-listener"
 
     # Build query parameters
     query_params = []
