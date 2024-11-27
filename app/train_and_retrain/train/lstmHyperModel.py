@@ -1,4 +1,3 @@
-
 from tensorflow.keras.layers import (
     LSTM,
     Dense,
@@ -17,6 +16,10 @@ from tensorflow.keras.optimizers import (
     Nadam,
 )
 from kerastuner import HyperModel
+import logging
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
 
 
 class LSTMHyperModel(HyperModel):
@@ -41,7 +44,7 @@ class LSTMHyperModel(HyperModel):
                 if required_keys.issubset(params.keys()):
                     validated_hyperparameters[key] = params
                 else:
-                    print(
+                    logger.info(
                         f"Warning: Hyperparameter '{key}' is missing required keys. Using standard values."
                     )
             elif isinstance(params, list):
@@ -51,7 +54,7 @@ class LSTMHyperModel(HyperModel):
                 # For hp.Boolean
                 validated_hyperparameters[key] = params
             else:
-                print(
+                logger.info(
                     f"Warning: Hyperparameter '{key}' has an unsupported format. Using standard values."
                 )
 
@@ -64,13 +67,17 @@ class LSTMHyperModel(HyperModel):
         # Hyperparameters to tune
         activation = hp.Choice(
             "activation",
-            values=self.hyperparameters.get("activation", ["tanh", "relu", "sigmoid", "linear"]),
+            values=self.hyperparameters.get(
+                "activation", ["tanh", "relu", "sigmoid", "linear"]
+            ),
         )
         dense_activation = hp.Choice(
             "dense_activation",
-            values=self.hyperparameters.get("dense_activation", ["tanh", "relu", "sigmoid", "linear"]),
+            values=self.hyperparameters.get(
+                "dense_activation", ["tanh", "relu", "sigmoid", "linear"]
+            ),
         )
-        
+
         # For num_lstm_layers
         num_lstm_layers_params = self.hyperparameters.get("num_lstm_layers", {})
         num_lstm_layers = hp.Int(
@@ -79,7 +86,7 @@ class LSTMHyperModel(HyperModel):
             max_value=num_lstm_layers_params.get("max_value", 4),
             step=num_lstm_layers_params.get("step", 1),
         )
-        
+
         # For lstm_units
         lstm_units_params = self.hyperparameters.get("lstm_units", {})
         lstm_units = hp.Int(
@@ -88,7 +95,7 @@ class LSTMHyperModel(HyperModel):
             max_value=lstm_units_params.get("max_value", 256),
             step=lstm_units_params.get("step", 32),
         )
-        
+
         # Similarly handle other hyperparameters
         # For dropout_rate
         dropout_rate_params = self.hyperparameters.get("dropout_rate", {})
@@ -98,16 +105,18 @@ class LSTMHyperModel(HyperModel):
             max_value=dropout_rate_params.get("max_value", 0.5),
             step=dropout_rate_params.get("step", 0.1),
         )
-        
+
         # For recurrent_dropout_rate
-        recurrent_dropout_rate_params = self.hyperparameters.get("recurrent_dropout_rate", {})
+        recurrent_dropout_rate_params = self.hyperparameters.get(
+            "recurrent_dropout_rate", {}
+        )
         recurrent_dropout_rate = hp.Float(
             "recurrent_dropout_rate",
             min_value=recurrent_dropout_rate_params.get("min_value", 0.0),
             max_value=recurrent_dropout_rate_params.get("max_value", 0.5),
             step=recurrent_dropout_rate_params.get("step", 0.1),
         )
-        
+
         # For num_dense_layers
         num_dense_layers_params = self.hyperparameters.get("num_dense_layers", {})
         num_dense_layers = hp.Int(
@@ -116,7 +125,7 @@ class LSTMHyperModel(HyperModel):
             max_value=num_dense_layers_params.get("max_value", 3),
             step=num_dense_layers_params.get("step", 1),
         )
-        
+
         # For dense_units
         dense_units_params = self.hyperparameters.get("dense_units", {})
         dense_units = hp.Int(
@@ -125,7 +134,7 @@ class LSTMHyperModel(HyperModel):
             max_value=dense_units_params.get("max_value", 256),
             step=dense_units_params.get("step", 32),
         )
-        
+
         # For learning_rate
         learning_rate_params = self.hyperparameters.get("learning_rate", {})
         learning_rate = hp.Float(
@@ -134,17 +143,19 @@ class LSTMHyperModel(HyperModel):
             max_value=learning_rate_params.get("max_value", 1e-2),
             sampling="log",
         )
-        
+
         # For optimizer_type
         optimizer_type = hp.Choice(
             "optimizer_type",
-            values=self.hyperparameters.get("optimizer_type", ["adam", "sgd", "rmsprop", "adagrad", "adadelta", "adamax", "nadam"]),
+            values=self.hyperparameters.get(
+                "optimizer_type",
+                ["adam", "sgd", "rmsprop", "adagrad", "adadelta", "adamax", "nadam"],
+            ),
         )
-        
+
         # For use_batch_norm
         use_batch_norm = hp.Boolean(
-            "use_batch_norm",
-            default=self.hyperparameters.get("use_batch_norm", False)
+            "use_batch_norm", default=self.hyperparameters.get("use_batch_norm", False)
         )
 
         # Build the model using these hyperparameters

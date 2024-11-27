@@ -1,5 +1,10 @@
 from config import apps_api
 
+import logging
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
+
 
 def Initialize():
 
@@ -7,7 +12,7 @@ def Initialize():
 
     if not app.registered:
         apps_api.patch_app_by_name("forecast", True)
-        print("App 'forecast' registered.")
+        logger.info("App 'forecast' registered.")
 
     # else:
-    #     print("App 'forecast' already active.")
+    #     logger.info("App 'forecast' already active.")

@@ -8,6 +8,11 @@ import pandas as pd
 from tensorflow.keras.layers import LSTM
 import pickle
 
+import logging
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
+
 
 def saveState(SessionLocal, Asset, model, asset_details):
     states = {}
@@ -17,7 +22,7 @@ def saveState(SessionLocal, Asset, model, asset_details):
                 h_state, c_state = layer.states
                 states[layer.name] = [h_state.numpy(), c_state.numpy()]
             else:
-                print(f"Warning: Layer '{layer.name}' has no initialized states.")
+                logger.info(f"Warning: Layer '{layer.name}' has no initialized states.")
 
     serialized_states = pickle.dumps(states)
     update_asset(
@@ -33,7 +38,7 @@ def loadState(SessionLocal, Asset, model, asset_details):
     if asset.state:
         states = pickle.loads(asset.state)
     else:
-        print("No saved states found for the given asset.")
+        logger.info("No saved states found for the given asset.")
         return
 
     # Set the states in the model's LSTM layers
@@ -44,9 +49,9 @@ def loadState(SessionLocal, Asset, model, asset_details):
                 h_state, c_state = layer.states
                 h_state.assign(h_state_value)
                 c_state.assign(c_state_value)
-                print(f"States loaded into layer '{layer.name}'")
+                logger.info(f"States loaded into layer '{layer.name}'")
             else:
-                print(f"No saved state for layer '{layer.name}'")
+                logger.info(f"No saved state for layer '{layer.name}'")
 
 
 def printState(model):
@@ -58,14 +63,14 @@ def printState(model):
     for layer in model.layers:
         if isinstance(layer, LSTM) and layer.stateful:
             h_state, c_state = layer.states
-            print(f"States for layer '{layer.name}':")
-            print(f"Hidden state (h): {h_state.numpy()}")
-            print(f"Cell state (c): {c_state.numpy()}")
+            logger.info(f"States for layer '{layer.name}':")
+            logger.info(f"Hidden state (h): {h_state.numpy()}")
+            logger.info(f"Cell state (c): {c_state.numpy()}")
 
 
 def save_latest_timestamp(SessionLocal, Asset, timestamp, tz, asset_details):
-    print("Updating latest timestamp")
-    print(timestamp)
+    logger.info("Updating latest timestamp")
+    logger.info(timestamp)
     if isinstance(timestamp, datetime) and timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=tz)
     elif isinstance(timestamp, np.datetime64):
@@ -119,10 +124,10 @@ def save_scaler(SessionLocal, Asset, scaler, asset_details):
     :param asset_details: Dictionary containing asset details
     """
     # Serialize the scaler using pickle
-    print("Saving scaler")
-    print(scaler)
+    logger.info("Saving scaler")
+    logger.info(scaler)
     serialized_scaler = pickle.dumps(scaler)
-    print(serialized_scaler)
+    logger.info(serialized_scaler)
     update_asset(
         SessionLocal,
         Asset,
@@ -144,7 +149,7 @@ def load_scaler(SessionLocal, Asset, asset_details):
     if asset.scaler:
         return pickle.loads(asset.scaler)  # Deserialize the scaler
     else:
-        print("No scaler found for the given asset.")
+        logger.info("No scaler found for the given asset.")
         return None
 
 

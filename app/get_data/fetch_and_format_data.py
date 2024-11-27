@@ -6,7 +6,10 @@ from eliona.api_client2.rest import ApiException
 from eliona.api_client2.api.data_api import DataApi
 import os
 from sklearn.preprocessing import MinMaxScaler
+import logging
 
+# Initialize the logger
+logger = logging.getLogger(__name__)
 # Set up configuration for the Eliona API
 configuration = eliona.api_client2.Configuration(host=os.getenv("API_ENDPOINT"))
 configuration.api_key["ApiKeyAuth"] = os.getenv("API_TOKEN")
@@ -21,17 +24,17 @@ def get_trend_data(asset_id, start_date, end_date):
     from_date = start_date.isoformat()
     to_date = end_date.isoformat()
     try:
-        print(f"Fetching data for asset {asset_id} from {from_date} to {to_date}")
+        logger.info(f"Fetching data for asset {asset_id} from {from_date} to {to_date}")
         result = data_api.get_data_trends(
             from_date=from_date,
             to_date=to_date,
             asset_id=asset_id,
             data_subtype="input",
         )
-        print(f"Received {len(result)} data points")
+        logger.info(f"Received {len(result)} data points")
         return result
     except ApiException as e:
-        print(f"Exception when calling DataApi->get_data_trends: {e}")
+        logger.info(f"Exception when calling DataApi->get_data_trends: {e}")
         return None
 
 
@@ -223,7 +226,6 @@ def fetch_pandas_data(
     # Drop any remaining NaN values
     df.dropna(inplace=True)
 
-    print("df.head()", df.head())
     return df
 
 
@@ -285,8 +287,8 @@ def prepare_data(
     # Extract the last Y's timestamp
     last_timestamp = data["timestamp"].iloc[len(data) - forecast_length]
     last_timestamp = pd.to_datetime(last_timestamp)
-    print("X_shape", X.shape)
-    print("Y_shape", Y.shape)
+    logger.info("X_shape", X.shape)
+    logger.info("Y_shape", Y.shape)
     return X, Y, scalers, last_timestamp
 
 
@@ -332,7 +334,7 @@ def prepare_data_for_forecast(
             scaled_values = scaler.transform(values).flatten()
             scaled_data[attr] = scaled_values
         else:
-            print(f"Attribute '{attr}' not found in data. Filling with zeros.")
+            logger.info(f"Attribute '{attr}' not found in data. Filling with zeros.")
             scaled_data[attr] = 0.0  # Or handle appropriately
 
     # Find the index corresponding to last_timestamp
@@ -341,13 +343,13 @@ def prepare_data_for_forecast(
     indices = data[data["timestamp"] > last_timestamp].index
 
     if len(indices) == 0:
-        print("No new data available after the last timestamp.")
+        logger.info("No new data available after the last timestamp.")
         return None, None, None, None
-    print("iding indices[0]", indices[:5])
+    logger.info("iding indices[0]", indices[:5])
     last_index = indices[0]
-    print("last_timestamp", last_timestamp)
-    print("last_index", last_index)
-    print("timesamp at last_index", data["timestamp"].iloc[last_index])
+    logger.info("last_timestamp", last_timestamp)
+    logger.info("last_index", last_index)
+    logger.info("timesamp at last_index", data["timestamp"].iloc[last_index])
     # Start index to include context_length steps before last_index
     start_index = last_index - context_length
     if start_index < 0:
@@ -364,7 +366,7 @@ def prepare_data_for_forecast(
         target_timestamps.append(timestamp)
 
     if not X_new:
-        print("No valid input sequences found after filtering.")
+        logger.info("No valid input sequences found after filtering.")
         return None, None, None, None
 
     X_new = np.array(X_new)  # Shape: [samples, context_length, num_features]
@@ -387,7 +389,7 @@ def prepare_data_for_forecast(
         )
     else:
         new_next_timestamp = None
-        print("Insufficient data for timestamp calculation.")
-    print("X_update_shape", X_update.shape)
-    print("X_last_shape", X_last.shape)
+        logger.info("Insufficient data for timestamp calculation.")
+    logger.info("X_update_shape", X_update.shape)
+    logger.info("X_last_shape", X_last.shape)
     return X_update, X_last, new_next_timestamp, last_y_timestamp_new

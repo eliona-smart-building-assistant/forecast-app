@@ -6,7 +6,10 @@ from eliona.api_client2.rest import ApiException
 import base64
 import tempfile
 import mimetypes
+import logging
 
+# Initialize the logger
+logger = logging.getLogger(__name__)
 ELIONA_API_KEY = os.getenv("API_TOKEN")
 ELIONA_HOST = os.getenv("API_ENDPOINT")
 
@@ -27,7 +30,7 @@ def create_asset_to_save_models():
         )
 
         asset = assets_api.put_asset(asset)
-        print(asset)
+        logger.info(asset)
         return asset
 
 
@@ -55,7 +58,7 @@ def save_model_to_eliona(model, file_name):
     gai = "forecast_models"
     asset_id = get_asset_id_by_gai(gai)
     if not asset_id:
-        print("Asset not found.")
+        logger.info("Asset not found.")
         return
 
     # Serialize the model to bytes using an in-memory buffer
@@ -98,13 +101,13 @@ def save_model_to_eliona(model, file_name):
                 for existing_att in existing_attachments:
                     asset.attachments.remove(existing_att)
                 asset.attachments.append(attachment)
-                print(
+                logger.info(
                     f"Replaced existing attachment '{attachment.name}' in asset ID {asset_id}."
                 )
             else:
                 # Add the new attachment
                 asset.attachments.append(attachment)
-                print(
+                logger.info(
                     f"Added new attachment '{attachment.name}' to asset ID {asset_id}."
                 )
 
@@ -113,7 +116,7 @@ def save_model_to_eliona(model, file_name):
                 asset_id=asset_id, asset=asset, expansions=["Asset.attachments"]
             )
         except ApiException as e:
-            print(f"Error adding attachment: {e}")
+            logger.info(f"Error adding attachment: {e}")
 
 
 def get_asset_id_by_gai(gai):
@@ -126,16 +129,16 @@ def get_asset_id_by_gai(gai):
                     return asset.id
             return asset.id
         except ApiException as e:
-            print(f"Exception when calling AssetsApi->get_asset_by_gai: {e}")
+            logger.info(f"Exception when calling AssetsApi->get_asset_by_gai: {e}")
             return None
 
 
 def delete_file(file_path):
     if os.path.exists(file_path):
         os.remove(file_path)
-        print(f"File {file_path} deleted.")
+        logger.info(f"File {file_path} deleted.")
     else:
-        print(f"File {file_path} does not exist.")
+        logger.info(f"File {file_path} does not exist.")
 
 
 import io
@@ -193,26 +196,26 @@ def load_model_from_eliona(file_name):
     # Retrieve the asset ID
     asset_id = get_asset_id_by_gai(gai)
     if not asset_id:
-        print("Asset not found.")
+        logger.info("Asset not found.")
         return None
 
     # Retrieve asset information along with attachments
     asset = get_asset_info_and_attachments(asset_id)
     if not asset:
-        print("Failed to retrieve asset information.")
+        logger.info("Failed to retrieve asset information.")
         return None
 
     # Find the attachment with the specified file name
     attachment = next((att for att in asset.attachments if att.name == file_name), None)
 
     if not attachment:
-        print(f"Attachment '{file_name}' not found in asset ID {asset_id}.")
+        logger.info(f"Attachment '{file_name}' not found in asset ID {asset_id}.")
         return None
 
     try:
         # Decode the base64 content
         model_bytes = base64.b64decode(attachment.content)
-        print(f"Decoded model bytes for '{file_name}'.")
+        logger.info(f"Decoded model bytes for '{file_name}'.")
 
         # Write the bytes to a temporary file
         with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp_file:
@@ -222,16 +225,16 @@ def load_model_from_eliona(file_name):
         try:
             # Load the model from the temporary file
             model = tf.keras.models.load_model(temp_filename)
-            print(f"TensorFlow model '{file_name}' loaded successfully.")
+            logger.info(f"TensorFlow model '{file_name}' loaded successfully.")
             model.compile()
-            print("Model compiled with saved parameters.")
+            logger.info("Model compiled with saved parameters.")
             return model
         finally:
             # Delete the temporary file
             os.remove(temp_filename)
 
     except Exception as e:
-        print(f"Error loading model '{file_name}': {e}")
+        logger.info(f"Error loading model '{file_name}': {e}")
         return None
 
 
@@ -251,26 +254,26 @@ def model_exists(file_name):
     # Retrieve the asset ID
     asset_id = get_asset_id_by_gai(gai)
     if not asset_id:
-        print("Asset not found.")
+        logger.info("Asset not found.")
         return False
 
     # Retrieve asset information along with attachments
     asset = get_asset_info_and_attachments(asset_id)
     if not asset:
-        print("Failed to retrieve asset information.")
+        logger.info("Failed to retrieve asset information.")
         return False
 
     # Check if attachments exist
     if not asset.attachments:
-        print("No attachments found in the asset.")
+        logger.info("No attachments found in the asset.")
         return False
 
     # Iterate through attachments to find a match
     for attachment in asset.attachments:
         if attachment.name == file_name:
-            print(f"Model '{file_name}' exists in asset ID {asset_id}.")
+            logger.info(f"Model '{file_name}' exists in asset ID {asset_id}.")
             return True
 
     # If no matching attachment is found
-    print(f"Model '{file_name}' does not exist in asset ID {asset_id}.")
+    logger.info(f"Model '{file_name}' does not exist in asset ID {asset_id}.")
     return False

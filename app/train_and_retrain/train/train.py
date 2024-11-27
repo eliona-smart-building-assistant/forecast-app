@@ -15,6 +15,10 @@ from .callbacks import (
     HyperModelCheckpointCallback,
     CustomBayesianOptimization,
 )
+import logging
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
 
 
 def train_lstm_model(
@@ -43,10 +47,10 @@ def train_lstm_model(
     project_name = f"hyperparameters_model_{asset_id}_{asset_details['target_attribute']}_{forecast_length}"
 
     # Prepare data
-    print(f"Training Parameters:")
-    print(f"  Epochs: {epochs}")
-    print(f"  Patience: {patience}")
-    print(f"  Validation Split: {validation_split}")
+    logger.info("Training Parameters:")
+    logger.info(f"  Epochs: {epochs}")
+    logger.info(f"  Patience: {patience}")
+    logger.info(f"  Validation Split: {validation_split}")
 
     X, y, scaler, last_timestamp = prepare_data(
         data,
@@ -58,10 +62,10 @@ def train_lstm_model(
 
     save_scaler(SessionLocal, Asset, scaler, asset_details)
 
-    print("X tail training", X[-3:])
-    print("y tail training", y[-3:])
-    print("X shape", X.shape)
-    print("y shape", y.shape)
+    logger.info("X tail training: %s", X[-3:])
+    logger.info("y tail training: %s", y[-3:])
+    logger.info("X shape: %s", X.shape)
+    logger.info("y shape: %s", y.shape)
     # Split the data
     num_features = X.shape[2]
     if hyperparameters or ((not hyperparameters) and (not parameters)):
@@ -73,7 +77,7 @@ def train_lstm_model(
         y_hyper = y[:data_length]
         validation_samples = int(len(X_hyper) * validation_split)
         if validation_samples == 0:
-            print(
+            logger.info(
                 "Validation split results in 0 validation samples. Skipping training."
             )
             return
@@ -91,7 +95,7 @@ def train_lstm_model(
             hypermodel,
             objective=objective,
             max_trials=max_trials,
-            directory="/tmp/hyperparameter_search",
+            directory="tmp/hyperparameter_search",
             project_name=project_name,
             max_retries_per_trial=0,  # Prevent retries
             max_consecutive_failed_trials=50,
@@ -104,7 +108,9 @@ def train_lstm_model(
         )
 
         tuner.search_space_summary()
-        hypermodel_checkpoint_callback = HyperModelCheckpointCallback()
+        hypermodel_checkpoint_callback = HyperModelCheckpointCallback(
+            stateful=parameters.get("stateful", True)
+        )
 
         tuner.search(
             X_train_hyper,
@@ -129,7 +135,9 @@ def train_lstm_model(
         best_trails_percent = hyperparameters.get("best_trails_percent", 0.05)
         top_n = max(1, int(total_trials * best_trails_percent))
 
-        print(f"Selecting the top {top_n} models out of {total_trials} total trials.")
+        logger.info(
+            f"Selecting the top {top_n} models out of {total_trials} total trials."
+        )
 
         # Get the top N hyperparameters and models
         best_hyperparameters_list = tuner.get_best_hyperparameters(num_trials=top_n)
@@ -148,7 +156,7 @@ def train_lstm_model(
             X_test_hyper = X[test_data_start:]
             y_test_hyper = y[test_data_start:]
 
-        print(
+        logger.info(
             f"Testing top models on new data from index {test_data_start} to {test_data_end}"
         )
 
@@ -168,20 +176,20 @@ def train_lstm_model(
                 evaluation[0] if isinstance(evaluation, (list, tuple)) else evaluation
             )
 
-            print(f"Model {i+1} evaluation on new data: Loss = {loss}")
+            logger.info(f"Model {i+1} evaluation on new data: Loss = {loss}")
 
             # Select the model with the best performance
             if best_score is None or loss < best_score:
                 best_score = loss
                 best_hyperparameters = hyperparameters
 
-        print("Best hyperparameters after testing on new data:")
-        print(best_hyperparameters)
-        print("Best hyperparameters values:")
-        print(best_hyperparameters.values)
+        logger.info("Best hyperparameters after testing on new data:")
+        logger.info(best_hyperparameters)
+        logger.info("Best hyperparameters values:")
+        logger.info(best_hyperparameters.values)
         validation_samples = int(len(X) * validation_split)
         if validation_samples == 0:
-            print(
+            logger.info(
                 "Validation split results in 0 validation samples. Skipping training."
             )
             return
@@ -230,7 +238,7 @@ def train_lstm_model(
     else:
         validation_samples = int(len(X) * validation_split)
         if validation_samples == 0:
-            print(
+            logger.info(
                 "Validation split results in 0 validation samples. Skipping training."
             )
             return

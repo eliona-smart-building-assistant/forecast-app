@@ -6,6 +6,10 @@ import numpy as np
 from app.data_to_eliona.create_asset_to_save_models import save_model_to_eliona
 from kerastuner.tuners import BayesianOptimization
 from app.get_data.api_calls import set_processing_status
+import logging
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
@@ -28,7 +32,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         # Check if 'val_loss' improved
         current_val_loss = logs.get("val_loss")
         if current_val_loss is not None and current_val_loss < self.best_val_loss:
-            print(
+            logger.info(
                 f"Validation loss improved from {self.best_val_loss} to {current_val_loss}. Saving model."
             )
             self.best_val_loss = current_val_loss
@@ -57,7 +61,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 "continue training next epoch",
             )
         else:
-            print(f"Validation loss did not improve from {self.best_val_loss}.")
+            logger.info(f"Validation loss did not improve from {self.best_val_loss}.")
             if self.best_weights:
                 self.model.set_weights(self.best_weights)
         stateful = self.asset_details["parameters"].get("stateful", True)
@@ -68,26 +72,27 @@ class CustomCallback(tf.keras.callbacks.Callback):
 
 
 class HyperModelCheckpointCallback(tf.keras.callbacks.Callback):
-    def __init__(self):
+    def __init__(self, stateful):
         super(HyperModelCheckpointCallback, self).__init__()
         self.best_val_loss = np.inf
         self.best_weights = None
+        self.stateful = stateful
 
     def on_epoch_end(self, epoch, logs=None):
         # Reset states of stateful layers
         current_val_loss = logs.get("val_loss")
         if current_val_loss is not None and current_val_loss < self.best_val_loss:
-            print(
+            logger.info(
                 f"Validation loss improved from {self.best_val_loss} to {current_val_loss}. Saving model."
             )
             self.best_val_loss = current_val_loss
             self.best_weights = self.model.get_weights()
         else:
-            print(f"Validation loss did not improve from {self.best_val_loss}.")
+            logger.info(f"Validation loss did not improve from {self.best_val_loss}.")
             if self.best_weights:
                 self.model.set_weights(self.best_weights)
-        stateful = self.asset_details["parameters"].get("stateful", True)
-        if stateful:
+
+        if self.stateful:
             for layer in self.model.layers:
                 if hasattr(layer, "reset_states") and callable(layer.reset_states):
                     layer.reset_states()
@@ -116,7 +121,7 @@ class CustomBayesianOptimization(BayesianOptimization):
     def on_trial_end(self, trial):
         super(CustomBayesianOptimization, self).on_trial_end(trial)
         # Custom logic after each trial
-        print(f"Trial {trial.trial_id} ended with score: {trial.score}")
+        logger.info(f"Trial {trial.trial_id} ended with score: {trial.score}")
         # Save the best model
         set_processing_status(
             self.SessionLocal,

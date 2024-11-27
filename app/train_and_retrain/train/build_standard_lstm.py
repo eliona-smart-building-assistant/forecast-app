@@ -2,6 +2,10 @@ import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Dense, Input
 from tensorflow.keras.models import Model
 import json
+import logging
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
 
 
 def build_lstm_model(
@@ -24,7 +28,7 @@ def build_lstm_model(
         parameters = dict(parameters)
 
     # Set default values
-    print("parameters", parameters)
+    logger.info("parameters", parameters)
     num_lstm_layers = parameters.get("num_lstm_layers", 2)
     lstm_units = parameters.get("lstm_units", 50)
 
@@ -42,22 +46,22 @@ def build_lstm_model(
     metrics = parameters.get("metrics", ["mse"])
     stateful = parameters.get("stateful", True)
     batch_size = parameters.get("batch_size", 1)
-    print("all parameters:")
-    print("num_lstm_layers", num_lstm_layers)
-    print("lstm_units", lstm_units)
-    print("activation", activation)
-    print("learning_rate", learning_rate)
-    print("optimizer_type", optimizer_type)
-    print("clipnorm", clipnorm)
-    print("loss", loss)
-    print("dropout_rate", dropout_rate)
-    print("recurrent_dropout_rate", recurrent_dropout_rate)
-    print("num_dense_layers", num_dense_layers)
-    print("dense_units", dense_units)
-    print("dense_activation", dense_activation)
-    print("use_batch_norm", use_batch_norm)
-    print("metrics", metrics)
-    print("batch_size", batch_size)
+    logger.info("all parameters:")
+    logger.info("num_lstm_layers", num_lstm_layers)
+    logger.info("lstm_units", lstm_units)
+    logger.info("activation", activation)
+    logger.info("learning_rate", learning_rate)
+    logger.info("optimizer_type", optimizer_type)
+    logger.info("clipnorm", clipnorm)
+    logger.info("loss", loss)
+    logger.info("dropout_rate", dropout_rate)
+    logger.info("recurrent_dropout_rate", recurrent_dropout_rate)
+    logger.info("num_dense_layers", num_dense_layers)
+    logger.info("dense_units", dense_units)
+    logger.info("dense_activation", dense_activation)
+    logger.info("use_batch_norm", use_batch_norm)
+    logger.info("metrics", metrics)
+    logger.info("batch_size", batch_size)
 
     inputs = Input(batch_shape=(batch_size, context_length, num_features))
     x = inputs
