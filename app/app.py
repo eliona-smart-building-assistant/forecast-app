@@ -27,6 +27,29 @@ def app_background_worker(SessionLocal, Asset):
             # Convert each row to a dictionary
             assets_dict = [dict(row._mapping) for row in assets]
 
+            # Get list of current asset IDs
+            current_asset_ids = [asset["id"] for asset in assets_dict]
+
+            # Terminate processes for assets that no longer exist
+            for process_info in running_processes[:]:
+                if process_info["asset_id"] not in current_asset_ids:
+                    # Terminate forecast process if running
+                    if process_info.get("forecast_process"):
+                        process_info["forecast_process"].terminate()
+                        process_info["forecast_process"] = None
+                        logger.info(
+                            f"Terminated forecast process for deleted asset ID {process_info['asset_id']}"
+                        )
+                    # Terminate train process if running
+                    if process_info.get("train_process"):
+                        process_info["train_process"].terminate()
+                        process_info["train_process"] = None
+                        logger.info(
+                            f"Terminated training process for deleted asset ID {process_info['asset_id']}"
+                        )
+                    # Remove from running_processes
+                    running_processes.remove(process_info)
+
             if not assets_dict:
                 logger.info("No assets to process.")
             else:
