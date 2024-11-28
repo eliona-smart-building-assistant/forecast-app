@@ -7,9 +7,8 @@ from api.api_calls import update_asset, create_asset
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from app.data_to_eliona.add_forecast_attributes import (
-    add_forecast_attributes_to_all_assets,
-)
+from app.data_to_eliona.add_forecast_attributes import add_forecast_attributes
+
 from app.forecast.forecast import forecast
 from app.train_and_retrain.train_and_retrain import train_and_retrain
 
@@ -53,16 +52,11 @@ def app_background_worker(SessionLocal, Asset):
             if not assets_dict:
                 logger.info("No assets to process.")
             else:
-                all_assets_with_asset_id = add_forecast_attributes_to_all_assets(
-                    assets_dict
-                )
 
-                for asset in all_assets_with_asset_id:
-                    asset_id = asset["asset_id"]
+                for asset in assets_dict:
+
                     asset_details = asset
                     id = asset["id"]
-
-                    logger.info(f"Asset ID: {asset_id}")
                     logger.info(f"id: {id}")
 
                     # Find existing processes for this asset
@@ -76,6 +70,16 @@ def app_background_worker(SessionLocal, Asset):
                         if not existing_process_info or not existing_process_info.get(
                             "forecast_process"
                         ):
+                            forecast_name_suffix = (
+                                f"_forecast_{asset['forecast_length']}"
+                            )
+
+                            # Assuming add_forecast_attributes returns asset_id
+                            asset_id = add_forecast_attributes(
+                                asset["gai"],
+                                asset["target_attribute"],
+                                forecast_name_suffix,
+                            )
                             forecast_process = Process(
                                 target=forecast, args=(asset_details, asset_id)
                             )
@@ -111,6 +115,16 @@ def app_background_worker(SessionLocal, Asset):
                         if not existing_process_info or not existing_process_info.get(
                             "train_process"
                         ):
+                            forecast_name_suffix = (
+                                f"_forecast_{asset['forecast_length']}"
+                            )
+
+                            # Assuming add_forecast_attributes returns asset_id
+                            asset_id = add_forecast_attributes(
+                                asset["gai"],
+                                asset["target_attribute"],
+                                forecast_name_suffix,
+                            )
                             train_process = Process(
                                 target=train_and_retrain, args=(asset_details, asset_id)
                             )
