@@ -52,6 +52,7 @@ def loadState(SessionLocal, Asset, model, asset_details):
                 logger.info(f"States loaded into layer '{layer.name}'")
             else:
                 logger.info(f"No saved state for layer '{layer.name}'")
+    return model
 
 
 def printState(model):

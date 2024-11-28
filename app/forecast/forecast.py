@@ -130,6 +130,7 @@ def forecast(asset_details, asset_id):
                     f"Updating model's state with {len(X_update)} new X sequences."
                 )
                 logger.info(f"First sequences from forecasting data: {X_update[:3]}")
+                model.summary()
                 for i in range(len(X_update)):
                     x = X_update[i].reshape(
                         (1, context_length, X_update.shape[2])
