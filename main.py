@@ -7,6 +7,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import os
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
