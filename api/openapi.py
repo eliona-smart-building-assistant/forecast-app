@@ -32,6 +32,8 @@ class AssetModel(BaseModel):
     processing_status: Optional[str] = None
     scaler: Optional[str] = None  # Changed from bytes to str
     state: Optional[str] = None  # Changed from bytes to str
+    train: Optional[bool] = None
+    forecast: Optional[bool] = None
 
     @classmethod
     def from_orm(cls, asset):
@@ -250,6 +252,10 @@ def create_api(DATABASE_URL: str) -> FastAPI:
 
         # Ensure 'processing_status' is set to "new" regardless of input
         db_asset["processing_status"] = "new"
+        if db_asset.get("train") is None:
+            db_asset["train"] = True
+        if db_asset.get("forecast") is None:
+            db_asset["forecast"] = True
 
         # **Important:** Remove 'id' if it's None to allow the database to auto-generate it
         if db_asset.get("id") is None:

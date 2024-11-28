@@ -60,7 +60,7 @@ def forecast(asset_details, asset_id):
 
     # Define the perform_forecast function
     def perform_forecast():
-
+        global timestamp_diff_buffer
         if os.path.exists(model_filename):
             processing_status = get_processing_status(
                 SessionLocal, Asset, asset_details

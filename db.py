@@ -62,6 +62,8 @@ def create_schema_and_table():
             processing_status VARCHAR(255),
             scaler BYTEA,
             state BYTEA,
+            train BOOLEAN,
+            forecast BOOLEAN,
             UNIQUE(gai, target_attribute, forecast_length)  -- Enforce uniqueness of the combination
         );
         """

@@ -13,6 +13,7 @@ from sqlalchemy import (
     Date,
     TIMESTAMP,
     BLOB,
+    BOOLEAN,
 )
 
 
@@ -36,6 +37,8 @@ def create_asset_table(metadata, engine):
         Column("processing_status", String(255)),
         Column("scaler", BLOB),
         Column("state", BLOB),
+        Column("train", BOOLEAN),
+        Column("forecast", BOOLEAN),
         schema="forecast",
         autoload_with=engine,
     )
@@ -123,6 +126,8 @@ def create_asset(
     processing_status: str = "new",
     scaler: bytes = None,
     state: bytes = None,
+    train: bool = True,
+    forecast: bool = True,
 ):
     logging.info(
         f"Creating new asset with GAI {gai}, target attribute {target_attribute}, and forecast length {forecast_length}"
@@ -144,6 +149,8 @@ def create_asset(
         processing_status=processing_status,
         scaler=scaler,
         state=state,
+        train=train,
+        forecast=forecast,
     )
 
     with SessionLocal() as session:
@@ -176,6 +183,8 @@ def update_asset(
     processing_status: str = None,
     scaler: bytes = None,
     state: bytes = None,
+    train: bool = None,
+    forecast: bool = None,
 ):
     logging.info(f"Updating asset with ID {id}")
 
@@ -214,6 +223,10 @@ def update_asset(
             update_values["scaler"] = scaler
         if state is not None:
             update_values["state"] = state
+        if train is not None:
+            update_values["train"] = train
+        if forecast is not None:
+            update_values["forecast"] = forecast
 
         if not update_values:
             logging.warning(f"No values provided to update for asset ID {id}")

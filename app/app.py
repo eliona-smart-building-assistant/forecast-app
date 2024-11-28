@@ -21,84 +21,112 @@ def app_background_worker(SessionLocal, Asset):
     running_processes = []
     while True:
         with SessionLocal() as session:
-            # Fetch all assets marked as 'new'
-            new_assets = session.execute(
-                Asset.select().where(Asset.c.processing_status == "new")
-            ).fetchall()
+            # Fetch all assets
+            assets = session.execute(Asset.select()).fetchall()
 
             # Convert each row to a dictionary
-            new_assets_dict = [dict(row._mapping) for row in new_assets]
+            assets_dict = [dict(row._mapping) for row in assets]
 
-            if not new_assets_dict:
-                logger.info("No new assets to process.")
+            if not assets_dict:
+                logger.info("No assets to process.")
             else:
                 all_assets_with_asset_id = add_forecast_attributes_to_all_assets(
-                    new_assets_dict
+                    assets_dict
                 )
 
                 for asset_id, asset_details in all_assets_with_asset_id:
                     logger.info(f"Asset ID: {asset_id}")
-                    logger.info(f"Asset details: {asset_details}")
 
-                    id = asset_details["id"]
-
-                    # Update the asset's status to 'processing'
-                    session.execute(
-                        Asset.update()
-                        .where(Asset.c.id == id)
-                        .values(processing_status="processing")
-                    )
-                    session.commit()
-
-                    # Start forecast and training processes
-                    forecast_process = Process(
-                        target=forecast,
-                        args=(asset_details, asset_id),
+                    # Find existing processes for this asset
+                    existing_process_info = next(
+                        (p for p in running_processes if p["asset_id"] == asset_id),
+                        None,
                     )
 
-                    train_process = Process(
-                        target=train_and_retrain,
-                        args=(asset_details, asset_id),
-                    )
+                    # Check and start/stop forecast process
+                    if asset_details.get("forecast"):
+                        if not existing_process_info or not existing_process_info.get(
+                            "forecast_process"
+                        ):
+                            forecast_process = Process(
+                                target=forecast, args=(asset_details, asset_id)
+                            )
+                            forecast_process.start()
+                            logger.info(
+                                f"Started forecast process for asset ID {asset_id}"
+                            )
 
-                    # Start both processes
-                    forecast_process.start()
-                    train_process.start()
+                            if existing_process_info:
+                                existing_process_info["forecast_process"] = (
+                                    forecast_process
+                                )
+                            else:
+                                running_processes.append(
+                                    {
+                                        "asset_id": asset_id,
+                                        "forecast_process": forecast_process,
+                                        "train_process": (
+                                            existing_process_info.get("train_process")
+                                            if existing_process_info
+                                            else None
+                                        ),
+                                    }
+                                )
+                    else:
+                        if existing_process_info and existing_process_info.get(
+                            "forecast_process"
+                        ):
+                            existing_process_info["forecast_process"].terminate()
+                            existing_process_info["forecast_process"] = None
+                            logger.info(
+                                f"Terminated forecast process for asset ID {asset_id}"
+                            )
 
-                    logger.info(
-                        f"Started forecast and train_and_retrain for asset ID {asset_id}"
-                    )
+                    # Check and start/stop training process
+                    if asset_details.get("train"):
+                        if not existing_process_info or not existing_process_info.get(
+                            "train_process"
+                        ):
+                            train_process = Process(
+                                target=train_and_retrain, args=(asset_details, asset_id)
+                            )
+                            train_process.start()
+                            logger.info(
+                                f"Started training process for asset ID {asset_id}"
+                            )
 
-                    # Add processes to the tracking list
-                    running_processes.append(
-                        {
-                            "asset_id": asset_id,
-                            "forecast_process": forecast_process,
-                            "train_process": train_process,
-                        }
-                    )
+                            if existing_process_info:
+                                existing_process_info["train_process"] = train_process
+                            else:
+                                running_processes.append(
+                                    {
+                                        "asset_id": asset_id,
+                                        "forecast_process": (
+                                            existing_process_info.get(
+                                                "forecast_process"
+                                            )
+                                            if existing_process_info
+                                            else None
+                                        ),
+                                        "train_process": train_process,
+                                    }
+                                )
+                    else:
+                        if existing_process_info and existing_process_info.get(
+                            "train_process"
+                        ):
+                            existing_process_info["train_process"].terminate()
+                            existing_process_info["train_process"] = None
+                            logger.info(
+                                f"Terminated training process for asset ID {asset_id}"
+                            )
 
-        # Check running processes for termination
-        for process_info in running_processes[:]:  # Make a copy of the list
-            asset_id = process_info["asset_id"]
-            forecast_process = process_info["forecast_process"]
-            train_process = process_info["train_process"]
+            # Clean up processes that have both processes terminated
+            running_processes = [
+                p
+                for p in running_processes
+                if p.get("forecast_process") or p.get("train_process")
+            ]
 
-            if forecast_process and not forecast_process.is_alive():
-                logger.info(f"Forecast process for asset ID {asset_id} has terminated.")
-                process_info["forecast_process"] = None
-
-            if train_process and not train_process.is_alive():
-                logger.info(f"Train process for asset ID {asset_id} has terminated.")
-                process_info["train_process"] = None
-
-            # Remove the entry if both processes have terminated
-            if (
-                not process_info["forecast_process"]
-                and not process_info["train_process"]
-            ):
-                running_processes.remove(process_info)
-
-        logging.info(f"Running processes: {running_processes}")
-        # Sleep before checking again for new assets and process statuses
+        # Sleep before checking again
         time.sleep(60)
