@@ -42,8 +42,7 @@ def train_and_retrain(
         f"/tmp/LSTM_model_{asset_id}_{target_column}_{forecast_length}.keras"
     )
     percentage_data_when_to_retrain = (
-        asset_details["trainingparameters"].get("percentage_data_when_to_retrain", 1.15)
-        or 1.15
+        trainingparameters.get("percentage_data_when_to_retrain", 1.15) or 1.15
     )
 
     db_url = os.getenv("CONNECTION_STRING")
