@@ -134,9 +134,8 @@ def add_forecast_attributes(gai, attribute_to_forecast, forecast_name_suffix):
 
 
 def add_forecast_attributes_to_all_assets(all_assets):
-    all_assets_with_asset_id = []
+    all_assets_with_id = []
     for asset in all_assets:
-
         # Accessing dictionary values using keys
         forecast_name_suffix = f"_forecast_{asset['forecast_length']}"
 
@@ -147,6 +146,10 @@ def add_forecast_attributes_to_all_assets(all_assets):
             forecast_name_suffix,
         )
 
-        all_assets_with_asset_id.append((asset_id, asset))
+        # Merge asset_id into the asset dictionary with the key 'id'
+        asset["asset_id"] = asset_id
 
-    return all_assets_with_asset_id
+        # Append the updated asset dictionary
+        all_assets_with_id.append(asset)
+
+    return all_assets_with_id

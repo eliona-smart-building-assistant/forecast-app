@@ -57,12 +57,17 @@ def app_background_worker(SessionLocal, Asset):
                     assets_dict
                 )
 
-                for asset_id, asset_details in all_assets_with_asset_id:
+                for asset in all_assets_with_asset_id:
+                    asset_id = asset["asset_id"]
+                    asset_details = asset
+                    id = asset["id"]
+
                     logger.info(f"Asset ID: {asset_id}")
+                    logger.info(f"id: {id}")
 
                     # Find existing processes for this asset
                     existing_process_info = next(
-                        (p for p in running_processes if p["asset_id"] == asset_id),
+                        (p for p in running_processes if p["id"] == id),
                         None,
                     )
 
@@ -75,9 +80,7 @@ def app_background_worker(SessionLocal, Asset):
                                 target=forecast, args=(asset_details, asset_id)
                             )
                             forecast_process.start()
-                            logger.info(
-                                f"Started forecast process for asset ID {asset_id}"
-                            )
+                            logger.info(f"Started forecast process for ID {id}")
 
                             if existing_process_info:
                                 existing_process_info["forecast_process"] = (
@@ -86,7 +89,7 @@ def app_background_worker(SessionLocal, Asset):
                             else:
                                 running_processes.append(
                                     {
-                                        "asset_id": asset_id,
+                                        "id": id,
                                         "forecast_process": forecast_process,
                                         "train_process": (
                                             existing_process_info.get("train_process")
@@ -101,9 +104,7 @@ def app_background_worker(SessionLocal, Asset):
                         ):
                             existing_process_info["forecast_process"].terminate()
                             existing_process_info["forecast_process"] = None
-                            logger.info(
-                                f"Terminated forecast process for asset ID {asset_id}"
-                            )
+                            logger.info(f"Terminated forecast process for ID {id}")
 
                     # Check and start/stop training process
                     if asset_details.get("train"):
@@ -114,16 +115,14 @@ def app_background_worker(SessionLocal, Asset):
                                 target=train_and_retrain, args=(asset_details, asset_id)
                             )
                             train_process.start()
-                            logger.info(
-                                f"Started training process for asset ID {asset_id}"
-                            )
+                            logger.info(f"Started training process for ID {id}")
 
                             if existing_process_info:
                                 existing_process_info["train_process"] = train_process
                             else:
                                 running_processes.append(
                                     {
-                                        "asset_id": asset_id,
+                                        "id": id,
                                         "forecast_process": (
                                             existing_process_info.get(
                                                 "forecast_process"
@@ -140,9 +139,7 @@ def app_background_worker(SessionLocal, Asset):
                         ):
                             existing_process_info["train_process"].terminate()
                             existing_process_info["train_process"] = None
-                            logger.info(
-                                f"Terminated training process for asset ID {asset_id}"
-                            )
+                            logger.info(f"Terminated training process for ID {id}")
 
             # Clean up processes that have both processes terminated
             running_processes = [
