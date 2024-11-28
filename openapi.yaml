@@ -226,6 +226,49 @@ paths:
           description: Asset not found.
         '500':
           description: Error retrieving asset.
+  /models:
+    get:
+      summary: List models
+      description: Retrieves a list of all model filenames in the /tmp directory.
+      operationId: list_models
+      responses:
+        '200':
+          description: Successfully retrieved models.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelModel'
+        '500':
+          description: Error listing models.
+  /models/{filename}:
+    delete:
+      summary: Delete model by filename
+      description: Deletes a specific model file from the /tmp directory.
+      operationId: delete_model
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Model deleted successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid filename format.
+        '404':
+          description: Model not found.
+        '500':
+          description: Error deleting model.
 components:
   schemas:
     AssetModel:
@@ -282,3 +325,22 @@ components:
         - gai
         - target_attribute
         - forecast_length
+    ModelModel:
+      type: object
+      properties:
+        filename:
+          type: string
+        asset_id:
+          type: integer
+          nullable: true
+        target_column:
+          type: string
+          nullable: true
+        forecast_length:
+          type: integer
+          nullable: true
+        exists:
+          type: boolean
+      required:
+        - filename
+        - exists

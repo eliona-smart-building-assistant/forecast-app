@@ -24,7 +24,7 @@ def start_background_tasks():
         db.create_schema_and_table()
 
         #
-        register_app.Initialize()
+        # register_app.Initialize()
 
         logger.info("API started")
         SessionLocal, Asset = db.setup_database()

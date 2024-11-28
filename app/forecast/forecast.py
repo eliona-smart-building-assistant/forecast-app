@@ -20,11 +20,7 @@ from app.get_data.fetch_and_format_data import (
     prepare_data_for_forecast,
 )
 from app.data_to_eliona.write_into_eliona import write_into_eliona
-from app.data_to_eliona.create_asset_to_save_models import (
-    load_model_from_eliona,
-    save_model_to_eliona,
-    model_exists,
-)
+from tensorflow.keras.models import load_model
 import websocket
 import ssl
 import threading
@@ -35,6 +31,7 @@ import logging
 # Initialize the logger
 logger = logging.getLogger(__name__)
 last_processed_time = 0  # Initialize the last processed time
+timestamp_diff_buffer = timedelta(days=5)
 
 
 def forecast(asset_details, asset_id):
@@ -56,13 +53,15 @@ def forecast(asset_details, asset_id):
     target_column = asset_details["target_attribute"]
     feature_columns = asset_details["feature_attributes"]
     tz = pytz.timezone("Europe/Berlin")
-    model_filename = f"LSTM_model_{asset_id}_{target_column}_{forecast_length}.keras"
+    model_filename = (
+        f"/tmp/LSTM_model_{asset_id}_{target_column}_{forecast_length}.keras"
+    )
     batch_size = 1  # Setting batch size to 1 for stateful LSTM
 
     # Define the perform_forecast function
     def perform_forecast():
-        timestamp_diff_buffer = timedelta(days=5)
-        if model_exists(model_filename):
+
+        if os.path.exists(model_filename):
             processing_status = get_processing_status(
                 SessionLocal, Asset, asset_details
             )
@@ -80,7 +79,7 @@ def forecast(asset_details, asset_id):
             else:
                 set_processing_status(SessionLocal, Asset, asset_details, "forecasting")
             logger.info(f"Loading existing model from {model_filename}")
-            model = load_model_from_eliona(model_filename)
+            model = load_model(model_filename)
             loadState(SessionLocal, Asset, model, asset_details)
             # Load the scaler
             scaler = load_scaler(SessionLocal, Asset, asset_details)
@@ -175,7 +174,7 @@ def forecast(asset_details, asset_id):
                 save_latest_timestamp(
                     SessionLocal, Asset, last_y_timestamp, tz, asset_details
                 )
-                save_model_to_eliona(model, model_filename)
+                model.save(model_filename)
                 saveState(SessionLocal, Asset, model, asset_details)
                 logger.info(f"Model saved to {model_filename}.")
         else:
@@ -242,10 +241,6 @@ def forecast(asset_details, asset_id):
                         perform_forecast()
                     except Exception as e:
                         logger.info(f"Error processing message: {e}")
-                else:
-                    logger.info(
-                        "Received message within 5 seconds of the last one. Ignoring."
-                    )
 
         def on_error(ws, error):
             logger.info(f"WebSocket error: {error}")

@@ -9,8 +9,10 @@ import shutil
 from sqlalchemy.engine import Row
 import base64
 import yaml
+import re
 
 BASE_PATH = os.getenv("HYPERPARAMETER_SEARCH_PATH", "./hyperparameter_search")
+MODELS_DIR = "/tmp"
 
 
 # Pydantic model for the 'assets_to_forecast' table
@@ -49,6 +51,29 @@ class AssetModel(BaseModel):
         if asset_dict.get("state"):
             asset_dict["state"] = base64.b64decode(asset_dict["state"])
         return asset_dict
+
+
+class ModelModel(BaseModel):
+    filename: str
+    asset_id: Optional[int] = None
+    target_column: Optional[str] = None
+    forecast_length: Optional[int] = None
+    exists: bool
+
+    @classmethod
+    def from_filename(cls, filename: str):
+        pattern = r"LSTM_model_(\d+)_(\w+)_(\d+)\.keras"
+        match = re.match(pattern, filename)
+        if match:
+            asset_id, target_column, forecast_length = match.groups()
+            return cls(
+                filename=filename,
+                asset_id=int(asset_id),
+                target_column=target_column,
+                forecast_length=int(forecast_length),
+                exists=True,
+            )
+        return cls(filename=filename, exists=True)
 
 
 # Retrieve DATABASE_URL from environment variables
@@ -98,6 +123,44 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             yield db
         finally:
             db.close()
+
+    @app.get("/v1/models", response_model=List[ModelModel])
+    def list_models():
+        """
+        Retrieve a list of all model filenames in the /tmp directory.
+        """
+        try:
+            files = os.listdir(MODELS_DIR)
+            model_files = [
+                f
+                for f in files
+                if os.path.isfile(os.path.join(MODELS_DIR, f))
+                and f.startswith("LSTM_model_")
+                and f.endswith(".keras")
+            ]
+            return [ModelModel.from_filename(f) for f in model_files]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error listing models: {e}")
+
+    @app.delete("/v1/models/{filename}", response_model=dict)
+    def delete_model(filename: str):
+        """
+        Delete a specific model file from the /tmp directory.
+        """
+        # Validate filenamAe to prevent directory traversal
+        if not re.match(r"^LSTM_model_\d+_\w+_\d+\.keras$", filename):
+            raise HTTPException(status_code=400, detail="Invalid filename format")
+
+        model_path = os.path.join(MODELS_DIR, filename)
+
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail="Model not found")
+
+        try:
+            os.remove(model_path)
+            return {"message": f"Model '{filename}' deleted successfully"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error deleting model: {e}")
 
     @app.delete("/v1/hyperparameter_search/{directory_name}", response_model=dict)
     def delete_hyperparameter_search(directory_name: str):

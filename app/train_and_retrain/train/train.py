@@ -44,7 +44,7 @@ def train_lstm_model(
     hyperparameters = asset_details["hyperparameters"] or {}
     hyperparameters_percent_data = hyperparameters.get("percent_data", 0.01)
     max_trials = hyperparameters.get("max_trials", 100)
-    project_name = f"hyperparameters_model_{asset_id}_{asset_details['target_attribute']}_{forecast_length}"
+    project_name = f"/tmp/hyperparameters_model_{asset_id}_{asset_details['target_attribute']}_{forecast_length}"
 
     # Prepare data
     logger.info("Training Parameters:")

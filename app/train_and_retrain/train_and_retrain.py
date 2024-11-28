@@ -18,7 +18,6 @@ from app.get_data.api_calls import (
     load_datalength,
     set_processing_status,
 )
-from app.data_to_eliona.create_asset_to_save_models import model_exists
 
 from api.api_calls import get_asset_by_id
 import logging
@@ -39,7 +38,9 @@ def train_and_retrain(
     start_date = tz.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
     logger.info(f"start_date: {start_date}")
 
-    model_filename = f"LSTM_model_{asset_id}_{target_column}_{forecast_length}.keras"
+    model_filename = (
+        f"/tmp/LSTM_model_{asset_id}_{target_column}_{forecast_length}.keras"
+    )
     percentage_data_when_to_retrain = (
         asset_details["trainingparameters"].get("percentage_data_when_to_retrain", 1.15)
         or 1.15
@@ -82,7 +83,7 @@ def train_and_retrain(
             sys.exit()
         end_date = tz.localize(datetime.now())
 
-        if model_exists(model_filename):
+        if os.path.exists(model_filename):
             logger.info(f"Model {model_filename} exists")
             data_length = load_datalength(SessionLocal, Asset, asset_details) or 0
             logger.info(f"Data length: {data_length}")

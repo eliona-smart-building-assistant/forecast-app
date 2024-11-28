@@ -3,7 +3,6 @@ import tensorflow as tf
 import numpy as np
 
 
-from app.data_to_eliona.create_asset_to_save_models import save_model_to_eliona
 from kerastuner.tuners import BayesianOptimization
 from app.get_data.api_calls import set_processing_status
 import logging
@@ -43,7 +42,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
                 self.asset_details,
                 "Saving best model on epoch end",
             )
-            save_model_to_eliona(self.model, self.model_save_path)
+            self.model.save(self.model_save_path)
             # Call saveState function
             save_latest_timestamp(
                 self.SessionLocal,
@@ -130,7 +129,7 @@ class CustomBayesianOptimization(BayesianOptimization):
             "Saving best model on trial end",
         )
         best_model = self.get_best_models(num_models=1)[0]
-        save_model_to_eliona(best_model, self.model_save_path)
+        best_model.save(self.model_save_path)
         # Call saveState function
         save_latest_timestamp(
             self.SessionLocal,

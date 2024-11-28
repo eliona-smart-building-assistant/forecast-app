@@ -12,7 +12,6 @@ from app.data_to_eliona.add_forecast_attributes import (
 )
 from app.forecast.forecast import forecast
 from app.train_and_retrain.train_and_retrain import train_and_retrain
-from app.data_to_eliona.create_asset_to_save_models import create_asset_to_save_models
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,6 @@ def app_background_worker(SessionLocal, Asset):
                 all_assets_with_asset_id = add_forecast_attributes_to_all_assets(
                     new_assets_dict
                 )
-                create_asset_to_save_models()
 
                 for asset_id, asset_details in all_assets_with_asset_id:
                     logger.info(f"Asset ID: {asset_id}")
