@@ -147,6 +147,6 @@ def app_background_worker(SessionLocal, Asset):
                 for p in running_processes
                 if p.get("forecast_process") or p.get("train_process")
             ]
-
+        logger.info(f"running processes: {running_processes}")
         # Sleep before checking again
         time.sleep(60)
