@@ -1,4 +1,3 @@
-# filepath: /c:/Users/sti/eliona/pythonscriptesting/forecast-app/main.py
 import db
 import register_app
 import app.app as app
@@ -24,7 +23,6 @@ def start_background_tasks():
         # Ensure that any multiprocessing setup is done properly here
         db.create_schema_and_table()
 
-        #
         register_app.Initialize()
 
         logger.info("API started")
@@ -36,10 +34,16 @@ def start_background_tasks():
         logger.error(f"Error in background tasks: {e}")
 
 
+def run_with_retry(func):
+    while True:
+        try:
+            func()
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {e}. Retrying...")
+
+
 if __name__ == "__main__":
     with ThreadPoolExecutor() as executor:
-        future_api = executor.submit(start_api)
-        future_background = executor.submit(start_background_tasks)
+        executor.submit(run_with_retry, start_api)
+        executor.submit(run_with_retry, start_background_tasks)
         logger.info("API and background tasks submitted to executor")
-        logger.info(f"API task running: {future_api.running()}")
-        logger.info(f"Background task running: {future_background.running()}")
