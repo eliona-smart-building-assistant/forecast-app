@@ -42,7 +42,7 @@ def fetch_data_in_chunks(asset_id, start_date, end_date):
     all_data = []
     current_start = start_date
     while current_start < end_date:
-        current_end = min(current_start + timedelta(days=15), end_date)
+        current_end = min(current_start + timedelta(days=5), end_date)
         data_chunk = get_trend_data(asset_id, current_start, current_end)
         if data_chunk:
             all_data.extend(data_chunk)
