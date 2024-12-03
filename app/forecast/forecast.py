@@ -27,6 +27,7 @@ import threading
 import sys
 from api.api_calls import get_asset_by_id
 import logging
+from filelock import FileLock, Timeout
 
 # Initialize the logger
 logger = logging.getLogger(__name__)
@@ -62,122 +63,149 @@ def forecast(asset_details, asset_id):
     def perform_forecast():
         global timestamp_diff_buffer
         if os.path.exists(model_filename):
-            processing_status = get_processing_status(
-                SessionLocal, Asset, asset_details
-            )
-            if "Saving" in processing_status:
-                logger.info(
-                    "Model is currently being saved in training. dont change status"
-                )
+            lock_file = model_filename + ".lock"
+            lock = FileLock(lock_file, timeout=None)
+            try:
+                with lock:
+                    processing_status = get_processing_status(
+                        SessionLocal, Asset, asset_details
+                    )
+                    if "Saving" in processing_status:
+                        logger.info(
+                            "Model is currently being saved in training. dont change status"
+                        )
 
-            elif (
-                "training" in processing_status and processing_status != "done_training"
-            ):
-                set_processing_status(
-                    SessionLocal, Asset, asset_details, "forecasting_and_training"
-                )
-            else:
-                set_processing_status(SessionLocal, Asset, asset_details, "forecasting")
-            logger.info(f"Loading existing model from {model_filename}")
-            model = load_model(model_filename)
-            loadState(SessionLocal, Asset, model, asset_details)
-            # Load the scaler
-            scaler = load_scaler(SessionLocal, Asset, asset_details)
+                    elif (
+                        "training" in processing_status
+                        and processing_status != "done_training"
+                    ):
+                        set_processing_status(
+                            SessionLocal,
+                            Asset,
+                            asset_details,
+                            "forecasting_and_training",
+                        )
+                    else:
+                        set_processing_status(
+                            SessionLocal, Asset, asset_details, "forecasting"
+                        )
+                    logger.info(f"Loading existing model from {model_filename}")
+                    model = load_model(model_filename)
+                    loadState(SessionLocal, Asset, model, asset_details)
+                    # Load the scaler
+                    scaler = load_scaler(SessionLocal, Asset, asset_details)
 
-            timestep_in_file = load_latest_timestamp(SessionLocal, Asset, asset_details)
-            timestep_in_file = datetime.fromisoformat(timestep_in_file)
-            context_length = load_contextlength(SessionLocal, Asset, asset_details)
+                    timestep_in_file = load_latest_timestamp(
+                        SessionLocal, Asset, asset_details
+                    )
+                    timestep_in_file = datetime.fromisoformat(timestep_in_file)
+                    context_length = load_contextlength(
+                        SessionLocal, Asset, asset_details
+                    )
 
-            new_end_date = datetime.now(tz)
-            logger.info(f"timestep_in_file {timestep_in_file}")
-            new_start_date = (timestep_in_file - timestamp_diff_buffer * 10).astimezone(
-                tz
-            )
+                    new_end_date = datetime.now(tz)
+                    logger.info(f"timestep_in_file {timestep_in_file}")
+                    new_start_date = (
+                        timestep_in_file - timestamp_diff_buffer * 10
+                    ).astimezone(tz)
 
-            logger.info(f"new_start_date {new_start_date}")
-            logger.info(f"timestamp_diff_buffer {timestamp_diff_buffer}")
+                    logger.info(f"new_start_date {new_start_date}")
+                    logger.info(f"timestamp_diff_buffer {timestamp_diff_buffer}")
 
-            df = fetch_pandas_data(
-                asset_id, new_start_date, new_end_date, target_column, feature_columns
-            )
+                    df = fetch_pandas_data(
+                        asset_id,
+                        new_start_date,
+                        new_end_date,
+                        target_column,
+                        feature_columns,
+                    )
 
-            if df.empty:
-                logger.info("No data fetched, skipping iteration.")
+                    if df.empty:
+                        logger.info("No data fetched, skipping iteration.")
+                        return
+
+                    X_update, X_last, new_next_timestamp, last_y_timestamp = (
+                        prepare_data_for_forecast(
+                            df,
+                            context_length,
+                            forecast_length,
+                            scaler,
+                            timestep_in_file,
+                            asset_details["target_attribute"],
+                            asset_details["feature_attributes"],
+                        )
+                    )
+                    timestamp_diff_buffer = (
+                        new_next_timestamp - last_y_timestamp
+                    ) * context_length
+                    logger.info("Latest timestamp updated.")
+                    logger.info("Prepared data")
+                    if X_update is None and X_last is None:
+                        logger.info("No new X sequences to process. Skipping...")
+                        return
+
+                    if len(X_update) > 0:
+                        logger.info(
+                            f"Updating model's state with {len(X_update)} new X sequences."
+                        )
+                        logger.info(
+                            f"First sequences from forecasting data: {X_update[:3]}"
+                        )
+                        model.summary()
+                        for i in range(len(X_update)):
+                            x = X_update[i].reshape(
+                                (1, context_length, X_update.shape[2])
+                            )  # Shape: (1, context_length, features)
+                            _ = model.predict(
+                                x, batch_size=batch_size
+                            )  # Perform prediction to update state
+                        logger.info("Model's state updated with new X sequences.")
+
+                    # Forecast the next y using X_last
+                    if X_last is not None:
+                        logger.info(f"last x sequence: {X_last}")
+                        logger.info(
+                            "Forecasting the next value using the latest X sequence."
+                        )
+                        next_prediction_scaled = model.predict(
+                            X_last, batch_size=batch_size
+                        )
+                        next_prediction = scaler[target_column].inverse_transform(
+                            next_prediction_scaled
+                        )
+                        logger.info(f"Next prediction: {next_prediction[0][0]}")
+                        logger.info(f"Predicted next timestamp: {new_next_timestamp}")
+
+                        # Write prediction into Eliona
+                        write_into_eliona(
+                            asset_id,
+                            new_next_timestamp,
+                            next_prediction[0][0],
+                            target_column,
+                            forecast_length,
+                        )
+
+                    else:
+                        logger.info("X_last is None. Skipping forecasting.")
+
+                    # Save the updated model after processing
+                    processing_status = get_processing_status(
+                        SessionLocal, Asset, asset_details
+                    )
+                    if "Saving" in processing_status:
+                        logger.info(
+                            "Model is currently being saved in training. Skipping saving."
+                        )
+                    else:
+                        save_latest_timestamp(
+                            SessionLocal, Asset, last_y_timestamp, tz, asset_details
+                        )
+                        model.save(model_filename)
+                        saveState(SessionLocal, Asset, model, asset_details)
+                        logger.info(f"Model saved to {model_filename}.")
+            except Timeout:
+                logger.error("Timeout occurred while trying to acquire the file lock.")
                 return
-
-            X_update, X_last, new_next_timestamp, last_y_timestamp = (
-                prepare_data_for_forecast(
-                    df,
-                    context_length,
-                    forecast_length,
-                    scaler,
-                    timestep_in_file,
-                    asset_details["target_attribute"],
-                    asset_details["feature_attributes"],
-                )
-            )
-            timestamp_diff_buffer = (
-                new_next_timestamp - last_y_timestamp
-            ) * context_length
-            logger.info("Latest timestamp updated.")
-            logger.info("Prepared data")
-            if X_update is None and X_last is None:
-                logger.info("No new X sequences to process. Skipping...")
-                return
-
-            if len(X_update) > 0:
-                logger.info(
-                    f"Updating model's state with {len(X_update)} new X sequences."
-                )
-                logger.info(f"First sequences from forecasting data: {X_update[:3]}")
-                model.summary()
-                for i in range(len(X_update)):
-                    x = X_update[i].reshape(
-                        (1, context_length, X_update.shape[2])
-                    )  # Shape: (1, context_length, features)
-                    _ = model.predict(
-                        x, batch_size=batch_size
-                    )  # Perform prediction to update state
-                logger.info("Model's state updated with new X sequences.")
-
-            # Forecast the next y using X_last
-            if X_last is not None:
-                logger.info(f"last x sequence: {X_last}")
-                logger.info("Forecasting the next value using the latest X sequence.")
-                next_prediction_scaled = model.predict(X_last, batch_size=batch_size)
-                next_prediction = scaler[target_column].inverse_transform(
-                    next_prediction_scaled
-                )
-                logger.info(f"Next prediction: {next_prediction[0][0]}")
-                logger.info(f"Predicted next timestamp: {new_next_timestamp}")
-
-                # Write prediction into Eliona
-                write_into_eliona(
-                    asset_id,
-                    new_next_timestamp,
-                    next_prediction[0][0],
-                    target_column,
-                    forecast_length,
-                )
-
-            else:
-                logger.info("X_last is None. Skipping forecasting.")
-
-            # Save the updated model after processing
-            processing_status = get_processing_status(
-                SessionLocal, Asset, asset_details
-            )
-            if "Saving" in processing_status:
-                logger.info(
-                    "Model is currently being saved in training. Skipping saving."
-                )
-            else:
-                save_latest_timestamp(
-                    SessionLocal, Asset, last_y_timestamp, tz, asset_details
-                )
-                model.save(model_filename)
-                saveState(SessionLocal, Asset, model, asset_details)
-                logger.info(f"Model saved to {model_filename}.")
         else:
             logger.info(f"Model {model_filename} does not exist. Skipping iteration.")
 

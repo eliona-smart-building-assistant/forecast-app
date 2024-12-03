@@ -6,6 +6,7 @@ import numpy as np
 from kerastuner.tuners import BayesianOptimization
 from app.get_data.api_calls import set_processing_status
 import logging
+from filelock import FileLock, Timeout
 
 # Initialize the logger
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
         self.best_weights = None
         self.latest_timestamp = latest_timestamp
         self.tz = tz
+        self.lock_file = self.model_save_path + ".lock"
 
     def on_epoch_end(self, epoch, logs=None):
         # Reset states after each epoch
@@ -36,29 +38,36 @@ class CustomCallback(tf.keras.callbacks.Callback):
             )
             self.best_val_loss = current_val_loss
             # Save the model
-            set_processing_status(
-                self.SessionLocal,
-                self.Asset,
-                self.asset_details,
-                "Saving best model on epoch end",
-            )
-            self.model.save(self.model_save_path)
-            # Call saveState function
-            save_latest_timestamp(
-                self.SessionLocal,
-                self.Asset,
-                self.latest_timestamp,
-                self.tz,
-                self.asset_details,
-            )
-
-            saveState(self.SessionLocal, self.Asset, self.model, self.asset_details)
-            set_processing_status(
-                self.SessionLocal,
-                self.Asset,
-                self.asset_details,
-                "continue training next epoch",
-            )
+            lock = FileLock(self.lock_file, timeout=None)
+            try:
+                with lock:
+                    set_processing_status(
+                        self.SessionLocal,
+                        self.Asset,
+                        self.asset_details,
+                        "Saving best model on epoch end",
+                    )
+                    # Save the model
+                    self.model.save(self.model_save_path)
+                    # Save the latest timestamp and state
+                    save_latest_timestamp(
+                        self.SessionLocal,
+                        self.Asset,
+                        self.latest_timestamp,
+                        self.tz,
+                        self.asset_details,
+                    )
+                    saveState(
+                        self.SessionLocal, self.Asset, self.model, self.asset_details
+                    )
+                    set_processing_status(
+                        self.SessionLocal,
+                        self.Asset,
+                        self.asset_details,
+                        "continue training next epoch",
+                    )
+            except Timeout:
+                logger.error("Timeout occurred while trying to acquire the file lock.")
         else:
             logger.info(f"Validation loss did not improve from {self.best_val_loss}.")
             if self.best_weights:
@@ -116,32 +125,38 @@ class CustomBayesianOptimization(BayesianOptimization):
         self.asset_details = asset_details
         self.latest_timestamp = latest_timestamp
         self.tz = tz
+        self.lock_file = self.model_save_path + ".lock"
 
     def on_trial_end(self, trial):
         super(CustomBayesianOptimization, self).on_trial_end(trial)
         # Custom logic after each trial
         logger.info(f"Trial {trial.trial_id} ended with score: {trial.score}")
         # Save the best model
-        set_processing_status(
-            self.SessionLocal,
-            self.Asset,
-            self.asset_details,
-            "Saving best model on trial end",
-        )
-        best_model = self.get_best_models(num_models=1)[0]
-        best_model.save(self.model_save_path)
-        # Call saveState function
-        save_latest_timestamp(
-            self.SessionLocal,
-            self.Asset,
-            self.latest_timestamp,
-            self.tz,
-            self.asset_details,
-        )
-        saveState(self.SessionLocal, self.Asset, best_model, self.asset_details)
-        set_processing_status(
-            self.SessionLocal,
-            self.Asset,
-            self.asset_details,
-            "continue training next trail",
-        )
+        lock = FileLock(self.lock_file, timeout=None)
+        try:
+            with lock:
+                set_processing_status(
+                    self.SessionLocal,
+                    self.Asset,
+                    self.asset_details,
+                    "Saving best model on trial end",
+                )
+                best_model = self.get_best_models(num_models=1)[0]
+                best_model.save(self.model_save_path)
+                # Call saveState function
+                save_latest_timestamp(
+                    self.SessionLocal,
+                    self.Asset,
+                    self.latest_timestamp,
+                    self.tz,
+                    self.asset_details,
+                )
+                saveState(self.SessionLocal, self.Asset, best_model, self.asset_details)
+                set_processing_status(
+                    self.SessionLocal,
+                    self.Asset,
+                    self.asset_details,
+                    "continue training next trail",
+                )
+        except Timeout:
+            logger.error("Timeout occurred while trying to acquire the file lock.")
