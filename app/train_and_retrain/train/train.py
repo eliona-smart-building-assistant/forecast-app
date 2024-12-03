@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN
 from sklearn.model_selection import train_test_split
 from app.get_data.fetch_and_format_data import prepare_data
 from app.get_data.api_calls import (
@@ -44,7 +44,7 @@ def train_lstm_model(
     hyperparameters = asset_details["hyperparameters"] or {}
     hyperparameters_percent_data = hyperparameters.get("percent_data", 0.01)
     max_trials = hyperparameters.get("max_trials", 100)
-    project_name = f"/tmp/hyperparameters_model_{asset_id}_{asset_details['target_attribute']}_{forecast_length}"
+    project_name = f"hyperparameters_model_{asset_id}_{asset_details['target_attribute']}_{forecast_length}"
 
     # Prepare data
     logger.info("Training Parameters:")
@@ -124,6 +124,7 @@ def train_lstm_model(
                     patience=patience,
                     restore_best_weights=True,
                 ),
+                TerminateOnNaN(),
                 hypermodel_checkpoint_callback,
             ],
         )
@@ -271,7 +272,7 @@ def train_lstm_model(
             epochs=epochs,
             batch_size=batch_size,
             validation_data=(X_val, y_val),
-            callbacks=[early_stopping, custom_callback],
+            callbacks=[early_stopping, custom_callback, TerminateOnNaN()],
             shuffle=False,
         )
 
