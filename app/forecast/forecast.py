@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import pytz
 import os
 import time
-
+import numpy as np
 from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.orm import sessionmaker
 from app.get_data.api_calls import (
@@ -64,9 +64,13 @@ def forecast(asset_details, asset_id):
         global timestamp_diff_buffer
         if os.path.exists(model_filename):
             lock_file = model_filename + ".lock"
-            lock = FileLock(lock_file, timeout=None)
+            lock = FileLock(lock_file, timeout=1e6)
             try:
                 with lock:
+                    parameters = asset_details.get("parameters", {})
+                    binary_encoding = parameters.get("binary_encoding", False)
+                    num_classes = parameters.get("num_classes", None)
+
                     processing_status = get_processing_status(
                         SessionLocal, Asset, asset_details
                     )
@@ -126,6 +130,7 @@ def forecast(asset_details, asset_id):
 
                     X_update, X_last, new_next_timestamp, last_y_timestamp = (
                         prepare_data_for_forecast(
+                            asset_details,
                             df,
                             context_length,
                             forecast_length,
@@ -170,17 +175,43 @@ def forecast(asset_details, asset_id):
                         next_prediction_scaled = model.predict(
                             X_last, batch_size=batch_size
                         )
-                        next_prediction = scaler[target_column].inverse_transform(
-                            next_prediction_scaled
-                        )
-                        logger.info(f"Next prediction: {next_prediction[0][0]}")
+                        # Format the prediction based on the type of task
+                        if binary_encoding:
+                            # Binary classification
+                            predicted_class = next_prediction_scaled
+                            logger.info(
+                                f"Predicted class (binary): {predicted_class[0][0]}"
+                            )
+                            formatted_prediction = predicted_class[0][0]
+                        if num_classes:
+                            # Multi-class classification
+                            logger.info(
+                                f"Raw probabilities (multi-class): {next_prediction_scaled[0]}"
+                            )
+                            predicted_class = np.argmax(
+                                next_prediction_scaled, axis=1
+                            )  # Class with highest probability
+                            logger.info(
+                                f"Predicted class (multi-class): {predicted_class[0]}"
+                            )
+                            formatted_prediction = predicted_class[0]
+                        else:
+                            # Regression
+                            next_prediction = scaler[target_column].inverse_transform(
+                                next_prediction_scaled
+                            )
+                            logger.info(
+                                f"Next prediction (regression): {next_prediction[0][0]}"
+                            )
+                            formatted_prediction = next_prediction[0][0]
+
                         logger.info(f"Predicted next timestamp: {new_next_timestamp}")
 
                         # Write prediction into Eliona
                         write_into_eliona(
                             asset_id,
                             new_next_timestamp,
-                            next_prediction[0][0],
+                            formatted_prediction,
                             target_column,
                             forecast_length,
                         )

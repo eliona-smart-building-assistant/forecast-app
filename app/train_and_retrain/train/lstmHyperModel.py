@@ -97,7 +97,6 @@ class LSTMHyperModel(HyperModel):
         )
 
         # Similarly handle other hyperparameters
-        # For dropout_rate
         dropout_rate_params = self.hyperparameters.get("dropout_rate", {})
         dropout_rate = hp.Float(
             "dropout_rate",
@@ -106,7 +105,6 @@ class LSTMHyperModel(HyperModel):
             step=dropout_rate_params.get("step", 0.1),
         )
 
-        # For recurrent_dropout_rate
         recurrent_dropout_rate_params = self.hyperparameters.get(
             "recurrent_dropout_rate", {}
         )
@@ -117,7 +115,6 @@ class LSTMHyperModel(HyperModel):
             step=recurrent_dropout_rate_params.get("step", 0.1),
         )
 
-        # For num_dense_layers
         num_dense_layers_params = self.hyperparameters.get("num_dense_layers", {})
         num_dense_layers = hp.Int(
             "num_dense_layers",
@@ -126,7 +123,6 @@ class LSTMHyperModel(HyperModel):
             step=num_dense_layers_params.get("step", 1),
         )
 
-        # For dense_units
         dense_units_params = self.hyperparameters.get("dense_units", {})
         dense_units = hp.Int(
             "dense_units",
@@ -135,7 +131,6 @@ class LSTMHyperModel(HyperModel):
             step=dense_units_params.get("step", 32),
         )
 
-        # For learning_rate
         learning_rate_params = self.hyperparameters.get("learning_rate", {})
         learning_rate = hp.Float(
             "learning_rate",
@@ -144,7 +139,6 @@ class LSTMHyperModel(HyperModel):
             sampling="log",
         )
 
-        # For optimizer_type
         optimizer_type = hp.Choice(
             "optimizer_type",
             values=self.hyperparameters.get(
@@ -153,10 +147,13 @@ class LSTMHyperModel(HyperModel):
             ),
         )
 
-        # For use_batch_norm
         use_batch_norm = hp.Boolean(
             "use_batch_norm", default=self.hyperparameters.get("use_batch_norm", False)
         )
+
+        # New: Binary and multi-class parameters
+        binary_encoding = self.parameters.get("binary_encoding", False)
+        num_classes = self.parameters.get("num_classes", None)
 
         # Build the model using these hyperparameters
         for layer_num in range(num_lstm_layers):
@@ -182,7 +179,16 @@ class LSTMHyperModel(HyperModel):
             if dropout_rate > 0:
                 x = Dropout(dropout_rate)(x)
 
-        outputs = Dense(1)(x)
+        # Output layer logic
+        if binary_encoding:
+            outputs = Dense(1, activation="sigmoid")(x)
+            loss = "binary_crossentropy"
+        elif num_classes is not None and num_classes > 1:
+            outputs = Dense(num_classes, activation="softmax")(x)
+            loss = "sparse_categorical_crossentropy"
+        else:
+            outputs = Dense(1)(x)
+            loss = self.parameters.get("loss", "mean_squared_error")
 
         model = Model(inputs, outputs)
 
@@ -199,9 +205,6 @@ class LSTMHyperModel(HyperModel):
         optimizer_class = optimizer_mapping[optimizer_type]
         optimizer = optimizer_class(learning_rate=learning_rate)
 
-        model.compile(
-            optimizer=optimizer,
-            loss=self.parameters.get("loss", "mean_squared_error"),
-        )
+        model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy"])
 
         return model

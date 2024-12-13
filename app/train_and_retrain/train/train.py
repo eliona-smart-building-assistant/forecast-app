@@ -53,6 +53,7 @@ def train_lstm_model(
     logger.info(f"  Validation Split: {validation_split}")
 
     X, y, scaler, last_timestamp = prepare_data(
+        asset_details,
         data,
         context_length,
         forecast_length,

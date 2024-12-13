@@ -230,7 +230,12 @@ def fetch_pandas_data(
 
 
 def prepare_data(
-    data, context_length, forecast_length, target_attribute, feature_attributes
+    asset_details,
+    data,
+    context_length,
+    forecast_length,
+    target_attribute,
+    feature_attributes,
 ):
     """
     Prepares data for training a TensorFlow LSTM model, including scaling.
@@ -243,6 +248,9 @@ def prepare_data(
     :param feature_attributes: List of feature attribute names (list of strings)
     :return: X, Y, scalers dictionary, last_timestamp
     """
+    parameters = asset_details.get("parameters", {})
+    binary_encoding = parameters.get("binary_encoding", False)
+    num_classes = parameters.get("num_classes", None)
     # Ensure the data is sorted by timestamp
     data = data.sort_values("timestamp").reset_index(drop=True)
 
@@ -257,7 +265,13 @@ def prepare_data(
     for attr in all_attributes:
         scaler = MinMaxScaler(feature_range=(0, 1))
         values = data[attr].values.reshape(-1, 1)
-        scaled_values = scaler.fit_transform(values).flatten()
+
+        if attr == target_attribute and (binary_encoding or num_classes):
+            scaled_values = values.flatten()  # Keep values as-is
+            logger.info(f"Skipping scaling for target attribute: {target_attribute}")
+        else:
+            scaled_values = scaler.fit_transform(values).flatten()
+
         scaled_data[attr] = scaled_values
         scalers[attr] = scaler  # Store the scaler for each attribute
 
@@ -293,6 +307,7 @@ def prepare_data(
 
 
 def prepare_data_for_forecast(
+    asset_details,
     data,
     context_length,
     forecast_length,
@@ -314,6 +329,10 @@ def prepare_data_for_forecast(
     :param feature_attributes: List of feature attribute names (list of strings)
     :return: X_update, X_last, new_next_timestamp, last_y_timestamp_new
     """
+    parameters = asset_details.get("parameters", {})
+    binary_encoding = parameters.get("binary_encoding", False)
+    num_classes = parameters.get("num_classes", None)
+
     # Ensure the data is sorted by timestamp
     data = data.sort_values("timestamp").reset_index(drop=True)
 
@@ -330,26 +349,41 @@ def prepare_data_for_forecast(
     for attr in all_attributes:
         if attr in data.columns:
             values = data[attr].values.reshape(-1, 1)
-            scaler = scalers[attr]
-            scaled_values = scaler.transform(values).flatten()
+
+            if attr == target_attribute and (binary_encoding or num_classes):
+                # Skip scaling for binary or multi-class targets
+                scaled_values = values.flatten()
+                logger.info(
+                    f"Skipping scaling for target attribute: {target_attribute} (binary/multi-class)"
+                )
+            elif attr in scalers:
+                scaler = scalers[attr]
+                try:
+                    scaled_values = scaler.transform(values).flatten()
+                except Exception as e:
+                    logger.warning(f"Scaler issue for '{attr}': {e}. Using raw values.")
+                    scaled_values = values.flatten()
+            else:
+                logger.warning(f"No scaler found for '{attr}'. Using raw values.")
+                scaled_values = values.flatten()
+
             scaled_data[attr] = scaled_values
         else:
-            logger.info(f"Attribute '{attr}' not found in data. Filling with zeros.")
+            logger.warning(f"Attribute '{attr}' not found in data. Filling with zeros.")
             scaled_data[attr] = 0.0  # Or handle appropriately
 
     # Find the index corresponding to last_timestamp
-
-    # If exact match not found, find the closest timestamp after last_timestamp
     indices = data[data["timestamp"] > last_timestamp].index
 
     if len(indices) == 0:
         logger.info("No new data available after the last timestamp.")
         return None, None, None, None
-    logger.info(f"iding indices[0] {indices[:5]}")
+
     last_index = indices[0]
     logger.info(f"last_timestamp {last_timestamp}")
     logger.info(f"last_index {last_index}")
     logger.info(f"timestamp at last_index {data['timestamp'].iloc[last_index]}")
+
     # Start index to include context_length steps before last_index
     start_index = last_index - context_length
     if start_index < 0:
@@ -381,7 +415,7 @@ def prepare_data_for_forecast(
         X_last = X_new[-1].reshape((1, context_length, len(all_attributes)))
         last_y_timestamp_new = target_timestamps[-1]
 
-    # Calculate `new_next_timestamp`
+    # Calculate new_next_timestamp
     if len(data) >= 2:
         timestamp_diff = data["timestamp"].iloc[-1] - data["timestamp"].iloc[-2]
         new_next_timestamp = (
@@ -390,6 +424,7 @@ def prepare_data_for_forecast(
     else:
         new_next_timestamp = None
         logger.info("Insufficient data for timestamp calculation.")
+
     logger.info(f"X_update_shape {X_update.shape}")
     logger.info(f"X_last_shape {X_last.shape}")
     return X_update, X_last, new_next_timestamp, last_y_timestamp_new

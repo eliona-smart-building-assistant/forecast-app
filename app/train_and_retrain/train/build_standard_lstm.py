@@ -12,7 +12,7 @@ def build_lstm_model(
     context_length, num_features, parameters  # Catch-all for additional parameters
 ):
     """
-    Builds a customizable multi-layer stateful LSTM model for time series forecasting.
+    Builds a customizable multi-layer stateful LSTM model for time series forecasting or classification.
 
     :param context_length: Number of timesteps used for context (input window)
     :param num_features: Number of input features
@@ -31,7 +31,6 @@ def build_lstm_model(
     logger.info(f"parameters {parameters}")
     num_lstm_layers = parameters.get("num_lstm_layers", 2)
     lstm_units = parameters.get("lstm_units", 50)
-
     activation = parameters.get("activation", "tanh")
     learning_rate = parameters.get("learning_rate", 0.001)
     optimizer_type = parameters.get("optimizer_type", "adam")
@@ -46,22 +45,12 @@ def build_lstm_model(
     metrics = parameters.get("metrics", ["mse"])
     stateful = parameters.get("stateful", True)
     batch_size = parameters.get("batch_size", 1)
+    binary_encoding = parameters.get("binary_encoding", False)
+    num_classes = parameters.get("num_classes", None)  # For multi-class classification
+
     logger.info("all parameters:")
-    logger.info(f"num_lstm_layers {num_lstm_layers}")
-    logger.info(f"lstm_units {lstm_units}")
-    logger.info(f"activation {activation}")
-    logger.info(f"learning_rate {learning_rate}")
-    logger.info(f"optimizer_type {optimizer_type}")
-    logger.info(f"clipnorm {clipnorm}")
-    logger.info(f"loss {loss}")
-    logger.info(f"dropout_rate {dropout_rate}")
-    logger.info(f"recurrent_dropout_rate {recurrent_dropout_rate}")
-    logger.info(f"num_dense_layers {num_dense_layers}")
-    logger.info(f"dense_units {dense_units}")
-    logger.info(f"dense_activation {dense_activation}")
-    logger.info(f"use_batch_norm {use_batch_norm}")
-    logger.info(f"metrics {metrics}")
-    logger.info(f"batch_size {batch_size}")
+    logger.info(f"binary_encoding {binary_encoding}")
+    logger.info(f"num_classes {num_classes}")
 
     inputs = Input(batch_shape=(batch_size, context_length, num_features))
     x = inputs
@@ -83,18 +72,29 @@ def build_lstm_model(
             x = BatchNormalization()(x)
 
         # Add Dense layers
-
-        x = Dense(
-            dense_units,
-            activation=dense_activation,
-        )(x)
-        if use_batch_norm:
-            x = BatchNormalization()(x)
-        if dropout_rate > 0:
-            x = Dropout(dropout_rate)(x)
+        for _ in range(num_dense_layers):
+            x = Dense(dense_units, activation=dense_activation)(x)
+            if use_batch_norm:
+                x = BatchNormalization()(x)
+            if dropout_rate > 0:
+                x = Dropout(dropout_rate)(x)
 
     # Output layer
-    outputs = Dense(1)(x)
+    if binary_encoding:
+        # Binary classification output
+        outputs = Dense(1, activation="sigmoid")(x)
+        loss = parameters.get("loss", "binary_crossentropy")
+        metrics = parameters.get("metrics", ["accuracy"])
+    elif num_classes is not None and num_classes > 1:
+        # Multi-class classification output
+        outputs = Dense(num_classes, activation="softmax")(x)
+        loss = parameters.get(
+            "loss", "sparse_categorical_crossentropy"
+        )  # Use sparse categorical crossentropy
+        metrics = parameters.get("metrics", ["accuracy"])
+    else:
+        # Regression output (default)
+        outputs = Dense(1)(x)
 
     model = Model(inputs, outputs)
 
@@ -117,6 +117,7 @@ def build_lstm_model(
         optimizer_kwargs["clipnorm"] = clipnorm
 
     optimizer = optimizer_class(**optimizer_kwargs)
+
     # Compile the model
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics if metrics else [])
 

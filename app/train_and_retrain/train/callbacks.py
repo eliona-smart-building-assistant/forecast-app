@@ -38,7 +38,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
             )
             self.best_val_loss = current_val_loss
             # Save the model
-            lock = FileLock(self.lock_file, timeout=None)
+            lock = FileLock(self.lock_file, timeout=1e6)
             try:
                 with lock:
                     set_processing_status(
@@ -132,7 +132,7 @@ class CustomBayesianOptimization(BayesianOptimization):
         # Custom logic after each trial
         logger.info(f"Trial {trial.trial_id} ended with score: {trial.score}")
         # Save the best model
-        lock = FileLock(self.lock_file, timeout=None)
+        lock = FileLock(self.lock_file, timeout=1e6)
         try:
             with lock:
                 set_processing_status(
