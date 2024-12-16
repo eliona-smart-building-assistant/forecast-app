@@ -179,10 +179,13 @@ def forecast(asset_details, asset_id):
                         if binary_encoding:
                             # Binary classification
                             predicted_class = next_prediction_scaled
-                            logger.info(
-                                f"Predicted class (binary): {predicted_class[0][0]}"
+                            predicted_class_label = (
+                                1 if predicted_class[0][0] > 0.5 else 0
                             )
-                            formatted_prediction = predicted_class[0][0]
+                            logger.info(
+                                f"Predicted class (binary): {predicted_class_label}"
+                            )
+                            formatted_prediction = predicted_class_label
                         if num_classes:
                             # Multi-class classification
                             logger.info(
