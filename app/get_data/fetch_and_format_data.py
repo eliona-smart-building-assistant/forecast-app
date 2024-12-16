@@ -417,7 +417,8 @@ def prepare_data_for_forecast(
 
     # Calculate new_next_timestamp
     if len(data) >= 2:
-        timestamp_diff = data["timestamp"].iloc[-1] - data["timestamp"].iloc[-2]
+        timestamp_diffs = data["timestamp"].diff().dropna()
+        timestamp_diff = timestamp_diffs.mean()
         new_next_timestamp = (
             data["timestamp"].iloc[-1] + timestamp_diff * forecast_length
         )
