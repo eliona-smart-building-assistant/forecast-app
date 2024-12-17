@@ -116,7 +116,7 @@ def create_asset(
     target_attribute: str,
     forecast_length: int,
     feature_attributes: dict = None,
-    start_date: str = "2024-11-1",
+    start_date: str = "2024-1-1",
     parameters: dict = None,
     datalength: int = None,
     hyperparameters: dict = None,

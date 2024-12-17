@@ -34,7 +34,7 @@ def train_and_retrain(
     forecast_length = asset_details["forecast_length"]
     target_column = asset_details["target_attribute"]
     tz = pytz.timezone("Europe/Berlin")
-    start_date_str = asset_details["start_date"] or "2024-11-6"
+    start_date_str = asset_details["start_date"] or "2024-1-1"
     start_date = tz.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
     logger.info(f"start_date: {start_date}")
 
