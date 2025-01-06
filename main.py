@@ -22,14 +22,18 @@ def start_background_tasks():
     try:
         # Ensure that any multiprocessing setup is done properly here
         db.create_schema_and_table()
+        logger.info("Schema and table creation completed.")
 
-        register_app.Initialize()
+        # register_app.Initialize()
+        logger.info("App initialization completed.")
 
         logger.info("API started")
         SessionLocal, Asset = db.setup_database()
+        logger.info("Database setup completed.")
 
         # Now, call the function to start the forecast and training processes
         app.app_background_worker(SessionLocal, Asset)
+        logger.info("Background worker started.")
     except Exception as e:
         logger.error(f"Error in background tasks: {e}")
 

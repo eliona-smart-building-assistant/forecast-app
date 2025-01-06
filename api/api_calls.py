@@ -15,6 +15,13 @@ from sqlalchemy import (
     BLOB,
     BOOLEAN,
 )
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import (
+    MetaData,
+    Table,
+    create_engine,
+)
+import os
 
 
 # Define the Asset table using SQLAlchemy
@@ -45,8 +52,26 @@ def create_asset_table(metadata, engine):
     return Asset
 
 
+def database_setup():
+    db_url = os.getenv("CONNECTION_STRING")
+    db_url_sql = db_url.replace("postgres", "postgresql")
+    DATABASE_URL = db_url_sql
+    engine = create_engine(DATABASE_URL)
+
+    # Use MetaData to reflect the 'assets_to_forecast' table from the 'forecast' schema
+    metadata = MetaData()
+    Asset = Table(
+        "assets_to_forecast", metadata, autoload_with=engine, schema="forecast"
+    )
+    # Create a new session for database interactions
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    return SessionLocal, Asset
+
+
 # Function to get all assets
-def get_all_assets(SessionLocal, Asset, skip: int = 0, limit: int = 1000):
+def get_all_assets(skip: int = 0, limit: int = 1000):
+    SessionLocal, Asset = database_setup()
     logging.info(f"Fetching all assets (skip: {skip}, limit: {limit})")
 
     with SessionLocal() as session:
@@ -63,7 +88,8 @@ def get_all_assets(SessionLocal, Asset, skip: int = 0, limit: int = 1000):
 
 
 # Function to get an asset by ID
-def get_asset_by_id(SessionLocal, Asset, id: int):
+def get_asset_by_id(id: int):
+    SessionLocal, Asset = database_setup()
     logging.info(f"Fetching asset with ID {id}")
 
     with SessionLocal() as session:
@@ -75,7 +101,8 @@ def get_asset_by_id(SessionLocal, Asset, id: int):
 
 
 # Function to get an asset by GAI
-def get_asset_by_gai(SessionLocal, Asset, gai: str):
+def get_asset_by_gai(gai: str):
+    SessionLocal, Asset = database_setup()
     logging.info(f"Fetching asset with GAI {gai}")
 
     with SessionLocal() as session:
@@ -88,8 +115,9 @@ def get_asset_by_gai(SessionLocal, Asset, gai: str):
 
 # Function to get an asset by GAI, target_attribute, and forecast_length
 def get_asset_by_gai_target_forecast(
-    SessionLocal, Asset, gai: str, target_attribute: str, forecast_length: int
+    gai: str, target_attribute: str, forecast_length: int
 ):
+    SessionLocal, Asset = database_setup()
     logging.info(
         f"Fetching asset with GAI {gai}, target attribute {target_attribute}, and forecast length {forecast_length}"
     )
@@ -110,8 +138,6 @@ def get_asset_by_gai_target_forecast(
 
 
 def create_asset(
-    SessionLocal,
-    Asset,
     gai: str,
     target_attribute: str,
     forecast_length: int,
@@ -129,6 +155,7 @@ def create_asset(
     train: bool = True,
     forecast: bool = True,
 ):
+    SessionLocal, Asset = database_setup()
     logging.info(
         f"Creating new asset with GAI {gai}, target attribute {target_attribute}, and forecast length {forecast_length}"
     )
@@ -166,8 +193,6 @@ def create_asset(
 
 # Function to update an existing asset
 def update_asset(
-    SessionLocal,
-    Asset,
     id: int,
     gai: str = None,
     target_attribute: str = None,
@@ -187,7 +212,7 @@ def update_asset(
     forecast: bool = None,
 ):
     logging.info(f"Updating asset with ID {id}")
-
+    SessionLocal, Asset = database_setup()
     with SessionLocal() as session:
         db_asset = session.execute(Asset.select().where(Asset.c.id == id)).first()
         if db_asset is None:
@@ -241,9 +266,9 @@ def update_asset(
 
 
 # Function to delete an asset by ID
-def delete_asset(SessionLocal, Asset, id: int):
+def delete_asset(id: int):
     logging.info(f"Deleting asset with ID {id}")
-
+    SessionLocal, Asset = database_setup()
     with SessionLocal() as session:
         db_asset = session.execute(Asset.select().where(Asset.c.id == id)).first()
         if db_asset is None:

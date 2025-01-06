@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def saveState(SessionLocal, Asset, model, asset_details):
+def saveState(model, asset_details):
     states = {}
     for layer in model.layers:
         if isinstance(layer, LSTM) and layer.stateful:
@@ -26,15 +26,13 @@ def saveState(SessionLocal, Asset, model, asset_details):
 
     serialized_states = pickle.dumps(states)
     update_asset(
-        SessionLocal,
-        Asset,
         id=asset_details["id"],
         state=serialized_states,
     )
 
 
-def loadState(SessionLocal, Asset, model, asset_details):
-    asset = get_asset_by_id(SessionLocal, Asset, asset_details["id"])
+def loadState(model, asset_details):
+    asset = get_asset_by_id(asset_details["id"])
     if asset.state:
         states = pickle.loads(asset.state)
     else:
@@ -69,7 +67,7 @@ def printState(model):
             logger.info(f"Cell state (c): {c_state.numpy()}")
 
 
-def save_latest_timestamp(SessionLocal, Asset, timestamp, tz, asset_details):
+def save_latest_timestamp(timestamp, tz, asset_details):
     logger.info("Updating latest timestamp")
     logger.info(f"{timestamp}")
     if isinstance(timestamp, datetime) and timestamp.tzinfo is None:
@@ -77,22 +75,18 @@ def save_latest_timestamp(SessionLocal, Asset, timestamp, tz, asset_details):
     elif isinstance(timestamp, np.datetime64):
         timestamp = pd.to_datetime(timestamp).tz_localize(tz).to_pydatetime()
 
-    update_asset(
-        SessionLocal, Asset, id=asset_details["id"], latest_timestamp=timestamp
-    )
+    update_asset(id=asset_details["id"], latest_timestamp=timestamp)
 
 
 def load_latest_timestamp(
-    SessionLocal,
-    Asset,
     asset_details,
 ):
-    asset = get_asset_by_id(SessionLocal, Asset, asset_details["id"])
+    asset = get_asset_by_id(asset_details["id"])
     return asset.latest_timestamp
 
 
-def load_contextlength(SessionLocal, Asset, asset_details):
-    asset = get_asset_by_id(SessionLocal, Asset, asset_details["id"])
+def load_contextlength(asset_details):
+    asset = get_asset_by_id(asset_details["id"])
     context_length = asset.context_length
 
     if not context_length:
@@ -101,26 +95,23 @@ def load_contextlength(SessionLocal, Asset, asset_details):
     return context_length
 
 
-def load_datalength(SessionLocal, Asset, asset_details):
-    asset = get_asset_by_id(SessionLocal, Asset, asset_details["id"])
+def load_datalength(asset_details):
+    asset = get_asset_by_id(asset_details["id"])
     return asset.datalength
 
 
-def save_datalength(SessionLocal, Asset, datalength, asset_details):
+def save_datalength(datalength, asset_details):
     update_asset(
-        SessionLocal,
-        Asset,
         id=asset_details["id"],
         datalength=datalength,
     )
 
 
-def save_scaler(SessionLocal, Asset, scaler, asset_details):
+def save_scaler(scaler, asset_details):
     """
     Serializes and saves the scaler to the database for the given asset.
 
-    :param SessionLocal: The database session
-    :param Asset: The Asset model
+
     :param scaler: The scaler object to be serialized and saved
     :param asset_details: Dictionary containing asset details
     """
@@ -130,14 +121,12 @@ def save_scaler(SessionLocal, Asset, scaler, asset_details):
     serialized_scaler = pickle.dumps(scaler)
     logger.info(f"{serialized_scaler}")
     update_asset(
-        SessionLocal,
-        Asset,
         id=asset_details["id"],
         scaler=serialized_scaler,  # Save serialized bytes
     )
 
 
-def load_scaler(SessionLocal, Asset, asset_details):
+def load_scaler(asset_details):
     """
     Loads and deserializes the scaler from the database for the given asset.
 
@@ -146,7 +135,7 @@ def load_scaler(SessionLocal, Asset, asset_details):
     :param asset_details: Dictionary containing asset details
     :return: The deserialized scaler object
     """
-    asset = get_asset_by_id(SessionLocal, Asset, asset_details["id"])
+    asset = get_asset_by_id(asset_details["id"])
     if asset.scaler:
         return pickle.loads(asset.scaler)  # Deserialize the scaler
     else:
@@ -154,7 +143,7 @@ def load_scaler(SessionLocal, Asset, asset_details):
         return None
 
 
-def save_parameters(SessionLocal, Asset, parameters, asset_details):
+def save_parameters(parameters, asset_details):
     """
     Updates parameters in asset_details while preserving unspecified ones.
 
@@ -172,15 +161,13 @@ def save_parameters(SessionLocal, Asset, parameters, asset_details):
         existing_parameters.update(parameters)
 
     # Save updated parameters
-    update_asset(
-        SessionLocal, Asset, id=asset_details["id"], parameters=existing_parameters
-    )
+    update_asset(id=asset_details["id"], parameters=existing_parameters)
 
     # Update asset_details with new parameters
     asset_details["parameters"] = existing_parameters
 
 
-def set_processing_status(SessionLocal, Asset, asset_details, status):
+def set_processing_status(asset_details, status):
     """
     Updates the processing status of the asset.
 
@@ -190,10 +177,10 @@ def set_processing_status(SessionLocal, Asset, asset_details, status):
         asset_details: Current asset details
         status: New processing status
     """
-    update_asset(SessionLocal, Asset, id=asset_details["id"], processing_status=status)
+    update_asset(id=asset_details["id"], processing_status=status)
 
 
-def get_processing_status(SessionLocal, Asset, asset_details):
+def get_processing_status(asset_details):
     """
     Retrieves the processing status of the asset.
 
@@ -202,5 +189,5 @@ def get_processing_status(SessionLocal, Asset, asset_details):
         Asset: Asset model
         asset_details: Current asset details
     """
-    asset = get_asset_by_id(SessionLocal, Asset, asset_details["id"])
+    asset = get_asset_by_id(asset_details["id"])
     return asset.processing_status

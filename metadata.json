@@ -2,8 +2,8 @@
     "name": "Forecast",
     "elionaMinVersion": "v11.0.0",  
      "displayName": {
-       "en": "App forecast",
-       "de": "App Prognose"
+       "en": "forecast app",
+       "de": "Vorhersage-App"
      },
      "description": {
        "en": "With this app, one can select attributes and features to forecast any number steps into the future.",

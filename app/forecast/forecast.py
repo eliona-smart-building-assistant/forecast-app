@@ -3,8 +3,7 @@ import pytz
 import os
 import time
 import numpy as np
-from sqlalchemy import create_engine, MetaData, Table
-from sqlalchemy.orm import sessionmaker
+
 from app.get_data.api_calls import (
     load_latest_timestamp,
     save_latest_timestamp,
@@ -39,16 +38,6 @@ def forecast(asset_details, asset_id):
 
     process_lock = threading.Lock()
     # Initialize database connection and ORM models here
-    db_url = os.getenv("CONNECTION_STRING")
-    db_url_sql = db_url.replace("postgres", "postgresql")
-    DATABASE_URL = db_url_sql
-    engine = create_engine(DATABASE_URL)
-
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    metadata = MetaData()
-    Asset = Table(
-        "assets_to_forecast", metadata, autoload_with=engine, schema="forecast"
-    )
 
     forecast_length = asset_details["forecast_length"]
     target_column = asset_details["target_attribute"]
@@ -71,9 +60,7 @@ def forecast(asset_details, asset_id):
                     binary_encoding = parameters.get("binary_encoding", False)
                     num_classes = parameters.get("num_classes", None)
 
-                    processing_status = get_processing_status(
-                        SessionLocal, Asset, asset_details
-                    )
+                    processing_status = get_processing_status(asset_details)
                     if "Saving" in processing_status:
                         logger.info(
                             "Model is currently being saved in training. dont change status"
@@ -84,28 +71,20 @@ def forecast(asset_details, asset_id):
                         and processing_status != "done_training"
                     ):
                         set_processing_status(
-                            SessionLocal,
-                            Asset,
                             asset_details,
                             "forecasting_and_training",
                         )
                     else:
-                        set_processing_status(
-                            SessionLocal, Asset, asset_details, "forecasting"
-                        )
+                        set_processing_status(asset_details, "forecasting")
                     logger.info(f"Loading existing model from {model_filename}")
                     model = load_model(model_filename)
-                    loadState(SessionLocal, Asset, model, asset_details)
+                    loadState(model, asset_details)
                     # Load the scaler
-                    scaler = load_scaler(SessionLocal, Asset, asset_details)
+                    scaler = load_scaler(asset_details)
 
-                    timestep_in_file = load_latest_timestamp(
-                        SessionLocal, Asset, asset_details
-                    )
+                    timestep_in_file = load_latest_timestamp(asset_details)
                     timestep_in_file = datetime.fromisoformat(timestep_in_file)
-                    context_length = load_contextlength(
-                        SessionLocal, Asset, asset_details
-                    )
+                    context_length = load_contextlength(asset_details)
 
                     new_end_date = datetime.now(tz)
                     logger.info(f"timestep_in_file {timestep_in_file}")
@@ -223,19 +202,15 @@ def forecast(asset_details, asset_id):
                         logger.info("X_last is None. Skipping forecasting.")
 
                     # Save the updated model after processing
-                    processing_status = get_processing_status(
-                        SessionLocal, Asset, asset_details
-                    )
+                    processing_status = get_processing_status(asset_details)
                     if "Saving" in processing_status:
                         logger.info(
                             "Model is currently being saved in training. Skipping saving."
                         )
                     else:
-                        save_latest_timestamp(
-                            SessionLocal, Asset, last_y_timestamp, tz, asset_details
-                        )
+                        save_latest_timestamp(last_y_timestamp, tz, asset_details)
                         model.save(model_filename)
-                        saveState(SessionLocal, Asset, model, asset_details)
+                        saveState(model, asset_details)
                         logger.info(f"Model saved to {model_filename}.")
             except Timeout:
                 logger.error("Timeout occurred while trying to acquire the file lock.")
@@ -295,10 +270,7 @@ def forecast(asset_details, asset_id):
                     last_processed_time = current_time
                     logger.info(f"Recieved message:{message}")
                     try:
-                        if (
-                            get_asset_by_id(SessionLocal, Asset, id=asset_details["id"])
-                            is None
-                        ):
+                        if get_asset_by_id(id=asset_details["id"]) is None:
                             logger.info("Asset does not exist")
                             sys.exit()
                         perform_forecast()

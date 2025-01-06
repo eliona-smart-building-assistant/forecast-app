@@ -13,13 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class CustomCallback(tf.keras.callbacks.Callback):
-    def __init__(
-        self, model_save_path, SessionLocal, Asset, asset_details, tz, latest_timestamp
-    ):
+    def __init__(self, model_save_path, asset_details, tz, latest_timestamp):
         super(CustomCallback, self).__init__()
         self.model_save_path = model_save_path
-        self.SessionLocal = SessionLocal
-        self.Asset = Asset
+
         self.asset_details = asset_details
         self.best_val_loss = np.inf
         self.best_weights = None
@@ -42,8 +39,6 @@ class CustomCallback(tf.keras.callbacks.Callback):
             try:
                 with lock:
                     set_processing_status(
-                        self.SessionLocal,
-                        self.Asset,
                         self.asset_details,
                         "Saving best model on epoch end",
                     )
@@ -51,18 +46,12 @@ class CustomCallback(tf.keras.callbacks.Callback):
                     self.model.save(self.model_save_path)
                     # Save the latest timestamp and state
                     save_latest_timestamp(
-                        self.SessionLocal,
-                        self.Asset,
                         self.latest_timestamp,
                         self.tz,
                         self.asset_details,
                     )
-                    saveState(
-                        self.SessionLocal, self.Asset, self.model, self.asset_details
-                    )
+                    saveState(self.model, self.asset_details)
                     set_processing_status(
-                        self.SessionLocal,
-                        self.Asset,
                         self.asset_details,
                         "continue training next epoch",
                     )
@@ -111,8 +100,6 @@ class CustomBayesianOptimization(BayesianOptimization):
         self,
         *args,
         model_save_path,
-        SessionLocal,
-        Asset,
         asset_details,
         tz,
         latest_timestamp,
@@ -120,8 +107,7 @@ class CustomBayesianOptimization(BayesianOptimization):
     ):
         super(CustomBayesianOptimization, self).__init__(*args, **kwargs)
         self.model_save_path = model_save_path
-        self.SessionLocal = SessionLocal
-        self.Asset = Asset
+
         self.asset_details = asset_details
         self.latest_timestamp = latest_timestamp
         self.tz = tz
@@ -136,8 +122,6 @@ class CustomBayesianOptimization(BayesianOptimization):
         try:
             with lock:
                 set_processing_status(
-                    self.SessionLocal,
-                    self.Asset,
                     self.asset_details,
                     "Saving best model on trial end",
                 )
@@ -145,16 +129,12 @@ class CustomBayesianOptimization(BayesianOptimization):
                 best_model.save(self.model_save_path)
                 # Call saveState function
                 save_latest_timestamp(
-                    self.SessionLocal,
-                    self.Asset,
                     self.latest_timestamp,
                     self.tz,
                     self.asset_details,
                 )
-                saveState(self.SessionLocal, self.Asset, best_model, self.asset_details)
+                saveState(best_model, self.asset_details)
                 set_processing_status(
-                    self.SessionLocal,
-                    self.Asset,
                     self.asset_details,
                     "continue training next trail",
                 )

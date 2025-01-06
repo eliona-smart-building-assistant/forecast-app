@@ -25,8 +25,6 @@ def train_lstm_model(
     asset_details,
     asset_id,
     data,
-    SessionLocal,
-    Asset,
     tz,
     context_length,
     forecast_length,
@@ -61,7 +59,7 @@ def train_lstm_model(
         asset_details["feature_attributes"],
     )
 
-    save_scaler(SessionLocal, Asset, scaler, asset_details)
+    save_scaler(scaler, asset_details)
 
     logger.info(f"X tail training: {X[-3:]}")
     logger.info(f"y tail training: {y[-3:]}")
@@ -70,9 +68,7 @@ def train_lstm_model(
     # Split the data
     num_features = X.shape[2]
     if hyperparameters or ((not hyperparameters) and (not parameters)):
-        set_processing_status(
-            SessionLocal, Asset, asset_details, "start_hyperparameter_search_training"
-        )
+        set_processing_status(asset_details, "start_hyperparameter_search_training")
         data_length = int(len(X) * hyperparameters_percent_data)
         X_hyper = X[:data_length]
         y_hyper = y[:data_length]
@@ -101,8 +97,6 @@ def train_lstm_model(
             max_retries_per_trial=0,  # Prevent retries
             max_consecutive_failed_trials=100,
             model_save_path=model_save_path,
-            SessionLocal=SessionLocal,
-            Asset=Asset,
             asset_details=asset_details,
             tz=tz,
             latest_timestamp=last_timestamp,
@@ -213,18 +207,14 @@ def train_lstm_model(
         )
         custom_callback = CustomCallback(
             model_save_path=model_save_path,
-            SessionLocal=SessionLocal,
-            Asset=Asset,
             asset_details=asset_details,
             tz=tz,
             latest_timestamp=last_timestamp,
         )
-        save_parameters(SessionLocal, Asset, best_hyperparameters.values, asset_details)
+        save_parameters(best_hyperparameters.values, asset_details)
 
         # Train model
-        set_processing_status(
-            SessionLocal, Asset, asset_details, "start_hyperparameter_training"
-        )
+        set_processing_status(asset_details, "start_hyperparameter_training")
         model.fit(
             X_train,
             y_train,
@@ -259,8 +249,6 @@ def train_lstm_model(
         )
         custom_callback = CustomCallback(
             model_save_path=model_save_path,
-            SessionLocal=SessionLocal,
-            Asset=Asset,
             asset_details=asset_details,
             tz=tz,
             latest_timestamp=last_timestamp,

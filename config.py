@@ -5,8 +5,6 @@ from eliona.api_client2 import (
     ApiClient,
     Configuration,
     AssetTypesApi,
-    ApiException,
-    AssetTypeAttribute,
 )
 
 
@@ -15,6 +13,7 @@ api_key = os.getenv("API_TOKEN")
 db_url = os.getenv("CONNECTION_STRING")
 db_url_sql = db_url.replace("postgres", "postgresql")
 port = os.getenv("API_SERVER_PORT")
+print(f"db_url_sql: {db_url}")
 
 configuration = Configuration(host=host)
 configuration.api_key["ApiKeyAuth"] = api_key
