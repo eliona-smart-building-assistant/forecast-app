@@ -24,7 +24,7 @@ def start_background_tasks():
         db.create_schema_and_table()
         logger.info("Schema and table creation completed.")
 
-        # register_app.Initialize()
+        register_app.Initialize()
         logger.info("App initialization completed.")
 
         logger.info("API started")
