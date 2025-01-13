@@ -41,4 +41,4 @@ def write_into_eliona(asset_id, timestamp, data, name, prediction_length):
         logger.info(f"{data}")
 
         # Send the data to the API
-        data_api.put_data(data, direct_mode="true")
+        data_api.put_data(data)
