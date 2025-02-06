@@ -1,12 +1,12 @@
-FROM python:3.11.9
+FROM eliona/base-python:latest-3.11-alpine-eliona
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+RUN apk update && apk add --no-cache \
     git \
-    libpq-dev \
+    postgresql-dev \
     gcc \
-    && apt-get clean
+    musl-dev
 
 COPY requirements.txt .
 
