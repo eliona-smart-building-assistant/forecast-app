@@ -12,6 +12,9 @@ COPY requirements.txt .
 
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
+ENV HYPERPARAMETER_SEARCH_PATH=/tmp/hyperparameter_search
+
+RUN mkdir -p /tmp/hyperparameter_search
 
 COPY . .
 
