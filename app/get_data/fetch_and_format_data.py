@@ -248,7 +248,15 @@ def prepare_data(
     :param feature_attributes: List of feature attribute names (list of strings)
     :return: X, Y, scalers dictionary, last_timestamp
     """
-    parameters = asset_details.get("parameters", {})
+    
+    
+    if not isinstance(asset_details, dict):
+        asset_details = {}
+
+    if not isinstance(asset_details.get("parameters"), dict):
+        asset_details["parameters"] = {}
+
+    parameters = asset_details["parameters"]
     binary_encoding = parameters.get("binary_encoding", False)
     num_classes = parameters.get("num_classes", None)
     # Ensure the data is sorted by timestamp
