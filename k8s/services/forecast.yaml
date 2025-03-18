@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: forecast
+  name: forecast
+spec:
+  ports:
+    - appProtocol: http
+      name: http-3000
+      port: 3000
+      protocol: TCP
+      targetPort: 3000
+    - appProtocol: http
+      name: http-80
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - appProtocol: http
+      name: http-8080
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    - appProtocol: http
+      name: http-8081
+      port: 8081
+      protocol: TCP
+      targetPort: 8081
+  selector:
+    app: forecast
+  type: ClusterIP
