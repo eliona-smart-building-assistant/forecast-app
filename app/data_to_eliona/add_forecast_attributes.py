@@ -44,13 +44,12 @@ def get_asset_type_name(asset_id):
 
 def get_all_attribute_names(asset_type_name):
     try:
-        # Correctly specify the expansion parameter to include attributes
         expansions = ["AssetType.attributes", "AssetType.asset_type_name"]
         asset_type = asset_types_api.get_asset_type_by_name(
             asset_type_name, expansions=expansions
         )
         if hasattr(asset_type, "attributes"):
-            # Extract the 'name' attribute from each attribute in the list
+            logger.info(asset_type)
             attribute_names = [attr.name for attr in asset_type.attributes]
             return attribute_names
         else:
@@ -103,13 +102,11 @@ def add_attribute_to_asset_type(asset_type_name, attribute_info):
 
 
 def add_forecast_attributes(gai, attribute_to_forecast, forecast_name_suffix):
-    # Get the asset type name of the given asset
     logger.info(f"Global Asset Identifier: {gai}")
     asset_id = get_asset_id_by_gai(gai)
     asset_type_name = get_asset_type_name(asset_id)
     logger.info(f"Asset type name: {asset_type_name}")
 
-    # Get all attributes of the asset type
     asset_type_all_attributes = get_all_attribute_names(asset_type_name)
     logger.info(f"All attributes: {asset_type_all_attributes}")
 
@@ -122,7 +119,6 @@ def add_forecast_attributes(gai, attribute_to_forecast, forecast_name_suffix):
 
         all_attribute_info = get_all_attribute_info(asset_type_name)
 
-        # Add forecast attribute based on existing attribute
         if attribute_to_forecast in all_attribute_info:
             forecast_attr_info = all_attribute_info[attribute_to_forecast]
             forecast_attr_info["name"] = forecast_attribute

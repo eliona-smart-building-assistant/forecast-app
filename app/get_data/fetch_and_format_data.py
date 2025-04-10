@@ -8,6 +8,8 @@ import os
 from sklearn.preprocessing import MinMaxScaler
 import logging
 
+from api.models import AssetModel
+
 # Initialize the logger
 logger = logging.getLogger(__name__)
 # Set up configuration for the Eliona API
@@ -230,42 +232,11 @@ def fetch_pandas_data(
 
 
 def prepare_data(
-    asset_details,
+    asset: AssetModel,
     data,
-    context_length,
-    forecast_length,
-    target_attribute,
-    feature_attributes,
 ):
-    """
-    Prepares data for training a TensorFlow LSTM model, including scaling.
-    Includes sequences of context_length for each attribute.
-
-    :param data: Pandas DataFrame containing 'timestamp', target_attribute, and feature_attributes
-    :param context_length: The number of timesteps used for context (input window)
-    :param forecast_length: The number of timesteps ahead to predict
-    :param target_attribute: The name of the target attribute (string)
-    :param feature_attributes: List of feature attribute names (list of strings)
-    :return: X, Y, scalers dictionary, last_timestamp
-    """
-    
-    
-    if not isinstance(asset_details, dict):
-        asset_details = {}
-
-    if not isinstance(asset_details.get("parameters"), dict):
-        asset_details["parameters"] = {}
-
-    parameters = asset_details["parameters"]
-    binary_encoding = parameters.get("binary_encoding", False)
-    num_classes = parameters.get("num_classes", None)
-    # Ensure the data is sorted by timestamp
     data = data.sort_values("timestamp").reset_index(drop=True)
-
-    # Combine target and feature attributes
-    if feature_attributes is None:
-        feature_attributes = []
-    all_attributes = [target_attribute] + feature_attributes
+    all_attributes = [asset.target_attribute] + asset.feature_attributes
 
     # Initialize a scaler for each attribute and scale the data
     scalers = {}
@@ -274,9 +245,9 @@ def prepare_data(
         scaler = MinMaxScaler(feature_range=(0, 1))
         values = data[attr].values.reshape(-1, 1)
 
-        if attr == target_attribute and (binary_encoding or num_classes):
+        if attr == asset.target_attribute and asset.parameters and (asset.parameters.binary_encoding or asset.parameters.num_classes):
             scaled_values = values.flatten()  # Keep values as-is
-            logger.info(f"Skipping scaling for target attribute: {target_attribute}")
+            logger.info(f"Skipping scaling for target attribute: {asset.target_attribute}")
         else:
             scaled_values = scaler.fit_transform(values).flatten()
 
@@ -287,16 +258,16 @@ def prepare_data(
     Y = []
 
     # Calculate the number of samples that can be generated
-    total_samples = len(scaled_data) - context_length - forecast_length + 1
+    total_samples = len(scaled_data) - asset.context_length - asset.forecast_length + 1
 
     # Loop over the dataset to create sequences
     for i in range(total_samples):
         # Extract input sequences for all attributes
-        x = scaled_data[all_attributes].iloc[i : i + context_length].values
+        x = scaled_data[all_attributes].iloc[i : i + asset.context_length].values
         # Extract the target value that is 'forecast_length' steps ahead
-        y_index = i + context_length + forecast_length - 1
+        y_index = i + asset.context_length + asset.forecast_length - 1
         if y_index < len(scaled_data):
-            y = scaled_data[target_attribute].iloc[y_index]
+            y = scaled_data[asset.target_attribute].iloc[y_index]
             X.append(x)
             Y.append(y)
         else:
@@ -307,7 +278,7 @@ def prepare_data(
     Y = np.array(Y)  # Shape: [samples, ]
 
     # Extract the last Y's timestamp
-    last_timestamp = data["timestamp"].iloc[len(data) - forecast_length]
+    last_timestamp = data["timestamp"].iloc[len(data) - asset.forecast_length]
     last_timestamp = pd.to_datetime(last_timestamp)
     logger.info(f"X_shape {X.shape}")
     logger.info(f"Y_shape {Y.shape}")
@@ -315,32 +286,12 @@ def prepare_data(
 
 
 def prepare_data_for_forecast(
-    asset_details,
+    asset: AssetModel,
     data,
-    context_length,
-    forecast_length,
     scalers,
     last_timestamp,
-    target_attribute,
-    feature_attributes,
 ):
-    """
-    Prepares data for forecasting using a trained LSTM model.
-    Includes sequences of context_length for each attribute.
-
-    :param data: Pandas DataFrame containing 'timestamp', target_attribute, and feature_attributes
-    :param context_length: The number of timesteps used for context (input window)
-    :param forecast_length: The number of timesteps ahead to predict
-    :param scalers: Dictionary of scalers for each attribute
-    :param last_timestamp: The last timestamp from the training data
-    :param target_attribute: The name of the target attribute (string)
-    :param feature_attributes: List of feature attribute names (list of strings)
-    :return: X_update, X_last, new_next_timestamp, last_y_timestamp_new
-    """
-    parameters = asset_details.get("parameters", {})
-    binary_encoding = parameters.get("binary_encoding", False)
-    num_classes = parameters.get("num_classes", None)
-
+ 
     # Ensure the data is sorted by timestamp
     data = data.sort_values("timestamp").reset_index(drop=True)
 
@@ -348,9 +299,9 @@ def prepare_data_for_forecast(
     data["timestamp"] = pd.to_datetime(data["timestamp"])
 
     # Combine target and feature attributes
-    if feature_attributes is None:
-        feature_attributes = []
-    all_attributes = [target_attribute] + feature_attributes
+    if asset.feature_attributes is None:
+        asset.feature_attributes = []
+    all_attributes = [asset.target_attribute] + asset.feature_attributes
     scaled_data = pd.DataFrame()
 
     # Use the loaded scalers to transform values
@@ -358,11 +309,11 @@ def prepare_data_for_forecast(
         if attr in data.columns:
             values = data[attr].values.reshape(-1, 1)
 
-            if attr == target_attribute and (binary_encoding or num_classes):
+            if attr == asset.target_attribute and (asset.parameters.binary_encoding or asset.parameters.num_classes):
                 # Skip scaling for binary or multi-class targets
                 scaled_values = values.flatten()
                 logger.info(
-                    f"Skipping scaling for target attribute: {target_attribute} (binary/multi-class)"
+                    f"Skipping scaling for target attribute: {asset.target_attribute} (binary/multi-class)"
                 )
             elif attr in scalers:
                 scaler = scalers[attr]
@@ -393,7 +344,7 @@ def prepare_data_for_forecast(
     logger.info(f"timestamp at last_index {data['timestamp'].iloc[last_index]}")
 
     # Start index to include context_length steps before last_index
-    start_index = last_index - context_length
+    start_index = last_index - asset.context_length
     if start_index < 0:
         start_index = 0
 
@@ -401,10 +352,10 @@ def prepare_data_for_forecast(
     X_new = []
     target_timestamps = []
 
-    for i in range(start_index, len(scaled_data) - context_length):
-        x = scaled_data[all_attributes].iloc[i : i + context_length].values
+    for i in range(start_index, len(scaled_data) - asset.context_length):
+        x = scaled_data[all_attributes].iloc[i : i + asset.context_length].values
         X_new.append(x)
-        timestamp = data["timestamp"].iloc[i + context_length]
+        timestamp = data["timestamp"].iloc[i + asset.context_length]
         target_timestamps.append(timestamp)
 
     if not X_new:
@@ -416,11 +367,11 @@ def prepare_data_for_forecast(
     # Separate X_new into X_update and X_last
     if len(X_new) > 1:
         X_update = X_new[:-1]
-        X_last = X_new[-1].reshape((1, context_length, len(all_attributes)))
+        X_last = X_new[-1].reshape((1, asset.context_length, len(all_attributes)))
         last_y_timestamp_new = target_timestamps[-1]
     else:
-        X_update = np.empty((0, context_length, len(all_attributes)))
-        X_last = X_new[-1].reshape((1, context_length, len(all_attributes)))
+        X_update = np.empty((0, asset.context_length, len(all_attributes)))
+        X_last = X_new[-1].reshape((1, asset.context_length, len(all_attributes)))
         last_y_timestamp_new = target_timestamps[-1]
 
     # Calculate new_next_timestamp
@@ -428,7 +379,7 @@ def prepare_data_for_forecast(
         timestamp_diffs = data["timestamp"].diff().dropna()
         timestamp_diff = timestamp_diffs.mean()
         new_next_timestamp = (
-            data["timestamp"].iloc[-1] + timestamp_diff * forecast_length
+            data["timestamp"].iloc[-1] + timestamp_diff * asset.forecast_length
         )
     else:
         new_next_timestamp = None

@@ -7,14 +7,15 @@ import numpy as np
 import pandas as pd
 from tensorflow.keras.layers import LSTM
 import pickle
-
+import base64 
 import logging
 
-# Initialize the logger
+from api.models import AssetModel, ForecastStatus, TrainingStatus
+
 logger = logging.getLogger(__name__)
 
 
-def saveState(model, asset_details):
+def saveState(model, asset:AssetModel):
     states = {}
     for layer in model.layers:
         if isinstance(layer, LSTM) and layer.stateful:
@@ -26,20 +27,21 @@ def saveState(model, asset_details):
 
     serialized_states = pickle.dumps(states)
     update_asset(
-        id=asset_details["id"],
+        id=asset.id,
         state=serialized_states,
     )
 
 
-def loadState(model, asset_details):
-    asset = get_asset_by_id(asset_details["id"])
-    if asset.state:
-        states = pickle.loads(asset.state)
+def loadState(model, asset:AssetModel):
+    asset = get_asset_by_id(asset.id)
+    if asset.state: 
+
+        raw_state = base64.b64decode(asset.state)
+        states = pickle.loads(raw_state)
     else:
         logger.info("No saved states found for the given asset.")
         return
 
-    # Set the states in the model's LSTM layers
     for layer in model.layers:
         if isinstance(layer, LSTM) and layer.stateful:
             if layer.name in states:
@@ -53,141 +55,97 @@ def loadState(model, asset_details):
     return model
 
 
-def printState(model):
-    """
-    Prints the hidden and cell states of all stateful LSTM layers in the model.
-
-    :param model: The Keras model containing stateful LSTM layers
-    """
-    for layer in model.layers:
-        if isinstance(layer, LSTM) and layer.stateful:
-            h_state, c_state = layer.states
-            logger.info(f"States for layer '{layer.name}':")
-            logger.info(f"Hidden state (h): {h_state.numpy()}")
-            logger.info(f"Cell state (c): {c_state.numpy()}")
 
 
-def save_latest_timestamp(timestamp, tz, asset_details):
-    logger.info("Updating latest timestamp")
-    logger.info(f"{timestamp}")
+def save_latest_timestamp(timestamp, tz, asset: AssetModel):
+
     if isinstance(timestamp, datetime) and timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=tz)
     elif isinstance(timestamp, np.datetime64):
         timestamp = pd.to_datetime(timestamp).tz_localize(tz).to_pydatetime()
 
-    update_asset(id=asset_details["id"], latest_timestamp=timestamp)
+    update_asset(id=asset.id, latest_timestamp=timestamp)
 
 
 def load_latest_timestamp(
-    asset_details,
+    asset:AssetModel,
 ):
-    asset = get_asset_by_id(asset_details["id"])
+    asset = get_asset_by_id(asset.id)
     return asset.latest_timestamp
 
 
-def load_contextlength(asset_details):
-    asset = get_asset_by_id(asset_details["id"])
-    context_length = asset.context_length
-
-    if not context_length:
-        context_length = asset.forecast_length * 3
-
-    return context_length
 
 
-def load_datalength(asset_details):
-    asset = get_asset_by_id(asset_details["id"])
+
+def load_datalength(asset:  AssetModel):
+    logger.info(asset)
+    asset = get_asset_by_id(asset.id)
     return asset.datalength
 
 
-def save_datalength(datalength, asset_details):
+def save_datalength(datalength, asset:  AssetModel):
     update_asset(
-        id=asset_details["id"],
+        id=asset.id,
         datalength=datalength,
     )
 
 
-def save_scaler(scaler, asset_details):
-    """
-    Serializes and saves the scaler to the database for the given asset.
-
-
-    :param scaler: The scaler object to be serialized and saved
-    :param asset_details: Dictionary containing asset details
-    """
-    # Serialize the scaler using pickle
-    logger.info("Saving scaler")
-    logger.info(f"{scaler}")
+def save_scaler(scaler, asset:  AssetModel):
     serialized_scaler = pickle.dumps(scaler)
-    logger.info(f"{serialized_scaler}")
     update_asset(
-        id=asset_details["id"],
-        scaler=serialized_scaler,  # Save serialized bytes
+        id=asset.id,
+        scaler=serialized_scaler,  
     )
 
 
-def load_scaler(asset_details):
-    """
-    Loads and deserializes the scaler from the database for the given asset.
-
-    :param SessionLocal: The database session
-    :param Asset: The Asset model
-    :param asset_details: Dictionary containing asset details
-    :return: The deserialized scaler object
-    """
-    asset = get_asset_by_id(asset_details["id"])
+def load_scaler(asset: AssetModel):
+    asset = get_asset_by_id(asset.id)
     if asset.scaler:
-        return pickle.loads(asset.scaler)  # Deserialize the scaler
+        raw_scaler = base64.b64decode(asset.scaler)  
+        return pickle.loads(raw_scaler)
     else:
         logger.info("No scaler found for the given asset.")
         return None
 
 
-def save_parameters(parameters, asset_details):
-    """
-    Updates parameters in asset_details while preserving unspecified ones.
+def save_parameters(parameters, asset: AssetModel):
 
-    Args:
-        SessionLocal: Database session
-        Asset: Asset model
-        parameters: New parameters to update
-        asset_details: Current asset details
-    """
-    # Get existing parameters or initialize empty dict
-    existing_parameters = asset_details.get("parameters", {}) or {}
+    existing_parameters = asset.parameters or {}
 
-    # Update only specified parameters
     if parameters:
         existing_parameters.update(parameters)
+    update_asset(id=asset.id, parameters=existing_parameters)
 
-    # Save updated parameters
-    update_asset(id=asset_details["id"], parameters=existing_parameters)
-
-    # Update asset_details with new parameters
-    asset_details["parameters"] = existing_parameters
+    asset.parameters = existing_parameters
 
 
-def set_processing_status(asset_details, status):
-    """
-    Updates the processing status of the asset.
-
-    Args:
-        SessionLocal: Database session
-        Asset: Asset model
-        asset_details: Current asset details
-        status: New processing status
-    """
-    update_asset(id=asset_details["id"], processing_status=status)
+def set_forecast_status(asset: AssetModel, status: ForecastStatus):
+    update_asset(id=asset.id, forecast_status=status.value)
 
 
-def get_processing_status(asset_details):
-    """
-    Retrieves the processing status of the asset.
+def get_forecast_status(asset: AssetModel):
+    updated_asset = get_asset_by_id(asset.id)
+    return updated_asset.forecast_status.value
 
-    Args:
-        SessionLocal: Database session
-        Asset: Asset model
-        asset_details: Current asset details
-    """
-    asset = get_asset_by_id(asset_details["id"])
-    return asset.processing_status
+
+def set_training_status(asset: AssetModel, status: TrainingStatus):
+    update_asset(id=asset.id, train_status=status.value)
+
+
+def get_training_status(asset: AssetModel):
+    updated_asset = get_asset_by_id(asset.id)
+    return updated_asset.train_status.value
+
+def set_forecast_bool(asset: AssetModel, bool: bool):
+    update_asset(id=asset.id, forecast=bool)
+
+def get_forecast_bool(asset: AssetModel):
+    updated_asset = get_asset_by_id(asset.id)
+    return updated_asset.forecast
+
+def set_train_bool(asset: AssetModel, bool: bool):
+    update_asset(id=asset.id, train=bool)
+
+def get_train_bool(asset: AssetModel):
+    updated_asset = get_asset_by_id(asset.id)
+    return updated_asset.train

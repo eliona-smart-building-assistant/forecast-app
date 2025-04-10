@@ -2,125 +2,91 @@ import time
 import pytz
 import os
 from datetime import datetime
+import sys
+import logging
 from app.get_data.fetch_and_format_data import fetch_pandas_data
 from app.train_and_retrain.train.train import train_lstm_model
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import (
-    MetaData,
-    Table,
-    create_engine,
-)
-import sys
-from app.get_data.api_calls import (
-    save_datalength,
-    load_contextlength,
-    load_datalength,
-    set_processing_status,
-)
-
+from app.get_data.api_calls import save_datalength,  load_datalength, set_training_status
 from api.api_calls import get_asset_by_id
-import logging
-
+from api.models import AssetModel, TrainingStatus
+from app.data_to_eliona.add_forecast_attributes import add_forecast_attributes
 logger = logging.getLogger(__name__)
 
-
-def train_and_retrain(
-    asset_details,
-    asset_id,
-):
-    trainingparameters = asset_details["trainingparameters"] or {}
-    sleep_time = trainingparameters.get("sleep_time", 3600) or 3600
-    forecast_length = asset_details["forecast_length"]
-    target_column = asset_details["target_attribute"]
+def train_and_retrain(asset: AssetModel):
     tz = pytz.timezone("Europe/Berlin")
-    start_date_str = asset_details["start_date"] or "2024-1-1"
-    start_date = tz.localize(datetime.strptime(start_date_str, "%Y-%m-%d"))
+    start_date = tz.localize(datetime.strptime(asset.start_date, "%Y-%m-%d"))
     logger.info(f"start_date: {start_date}")
+    
+    forecast_name_suffix = f"_forecast_{asset.forecast_length}"
 
-    model_filename = (
-        f"/tmp/LSTM_model_{asset_id}_{target_column}_{forecast_length}.keras"
-    )
-    percentage_data_when_to_retrain = (
-        trainingparameters.get("percentage_data_when_to_retrain", 1.15) or 1.15
-    )
-
-    context_length = load_contextlength(asset_details)
-
-    def train_and_handle():
-
+    try:
+        asset_id = add_forecast_attributes(asset.gai, asset.target_attribute, forecast_name_suffix)
+    except Exception as e:
+        logger.error(f"Error computing asset_id: {e}")
+        sys.exit(1)
+    model_filename = f"/tmp/LSTM_model_{asset_id}_{asset.target_attribute}_{asset.forecast_length}.keras"
+    
+    def train_and_handle(df):
         train_lstm_model(
-            asset_details,
+            asset,
             asset_id,
             df,
             tz=tz,
-            context_length=context_length,
-            forecast_length=forecast_length,
             model_save_path=model_filename,
         )
-        set_processing_status(asset_details, "done_training")
-
-        save_datalength(len(df), asset_details)
+        set_training_status(asset, TrainingStatus.COMPLETED)
+        save_datalength(len(df), asset)
 
     while True:
-        if get_asset_by_id(id=asset_details["id"]) == None:
-            logger.info("Asset does not exist sys.exit()")
+        if get_asset_by_id(id=asset.id) is None:
+            logger.info("Asset does not exist. Exiting training loop.")
             sys.exit()
         end_date = tz.localize(datetime.now())
-
+        
         if os.path.exists(model_filename):
-            logger.info(f"Model {model_filename} exists")
-            data_length = load_datalength(asset_details) or 0
+            logger.info(f"Model {model_filename} exists.")
+            data_length = load_datalength(asset) or 0
             logger.info(f"Data length: {data_length}")
             df = fetch_pandas_data(
                 asset_id,
                 start_date,
                 end_date,
-                target_column,
-                asset_details["feature_attributes"],
+                asset.target_attribute,
+                asset.feature_attributes,
             )
-            required_min_length = context_length + forecast_length
+            required_min_length = asset.context_length + asset.forecast_length
             if len(df) < required_min_length:
                 logger.info("Not enough data to forecast.")
-                logger.info(f"min length: {required_min_length}")
-                set_processing_status(asset_details, "not enough data for training")
+                logger.info(f"Required min length: {required_min_length}")
+                set_training_status(asset, TrainingStatus.NOT_ENOUGH_DATA)
                 logger.info("Skipping retraining due to insufficient data.")
-                logger.info(
-                    f"Sleeping for {sleep_time} seconds before next retraining cycle..."
-                )
-                time.sleep(sleep_time)
+                logger.info(f"Sleeping for {asset.trainingparameters.sleep_time} seconds before next retraining cycle...")
+                time.sleep(asset.trainingparameters.sleep_time)
                 continue
-            if len(df) > data_length * percentage_data_when_to_retrain:
-                logger.info("Retraining model")
-                set_processing_status(asset_details, "start_re_training")
-                train_and_handle()
+            if len(df) > data_length * asset.trainingparameters.percentage_data_when_to_retrain:
+                logger.info("Retraining model.")
+                set_training_status(asset, TrainingStatus.START_RE_TRAINING)
+                train_and_handle(df)
         else:
-            logger.info("Model does not exist")
-
+            logger.info("Model does not exist. Starting training.")
             df = fetch_pandas_data(
                 asset_id,
                 start_date,
                 end_date,
-                target_column,
-                asset_details["feature_attributes"],
+                asset.target_attribute,
+                asset.feature_attributes,
             )
-            required_min_length = context_length + forecast_length
+            required_min_length = asset.context_length + asset.forecast_length
             if len(df) < required_min_length:
                 logger.info("Not enough data to forecast.")
-                logger.info(f"min length: {required_min_length}")
-                set_processing_status(asset_details, "not enough data for training")
-                logger.info(f"Skipping retraining due to insufficient data.")
-                logger.info(
-                    f"Sleeping for {sleep_time} seconds before next retraining cycle..."
-                )
-                time.sleep(sleep_time)
+                logger.info(f"Required min length: {required_min_length}")
+                set_training_status(asset, TrainingStatus.NOT_ENOUGH_DATA)
+                logger.info("Skipping training due to insufficient data.")
+                logger.info(f"Sleeping for {asset.trainingparameters.sleep_time} seconds before next training cycle...")
+                time.sleep(asset.trainingparameters.sleep_time)
                 continue
+            set_training_status(asset, TrainingStatus.START_TRAINING)
+            train_and_handle(df)
 
-            set_processing_status(asset_details, "start_training")
-            train_and_handle()
-
-        # Wait for the specified sleep time before running again
-        logger.info(
-            f"Sleeping for {sleep_time} seconds before next retraining cycle..."
-        )
-        time.sleep(sleep_time)
+        logger.info(f"Sleeping for {asset.trainingparameters.sleep_time} seconds before next retraining cycle...")
+        time.sleep(asset.trainingparameters.sleep_time)

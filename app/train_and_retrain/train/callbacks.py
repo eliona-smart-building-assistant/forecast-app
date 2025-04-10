@@ -1,10 +1,11 @@
+from api.models import  AssetModel, TrainingStatus
 from app.get_data.api_calls import saveState, save_latest_timestamp
 import tensorflow as tf
 import numpy as np
 
 
 from kerastuner.tuners import BayesianOptimization
-from app.get_data.api_calls import set_processing_status
+from app.get_data.api_calls import set_training_status
 import logging
 from filelock import FileLock, Timeout
 
@@ -16,8 +17,7 @@ class CustomCallback(tf.keras.callbacks.Callback):
     def __init__(self, model_save_path, asset_details, tz, latest_timestamp):
         super(CustomCallback, self).__init__()
         self.model_save_path = model_save_path
-
-        self.asset_details = asset_details
+        self.asset_details: AssetModel = asset_details
         self.best_val_loss = np.inf
         self.best_weights = None
         self.latest_timestamp = latest_timestamp
@@ -38,36 +38,24 @@ class CustomCallback(tf.keras.callbacks.Callback):
             lock = FileLock(self.lock_file, timeout=1e6)
             try:
                 with lock:
-                    set_processing_status(
-                        self.asset_details,
-                        "Saving best model on epoch end",
-                    )
-                    # Save the model
+                    set_training_status(self.asset_details, TrainingStatus.SAVE_ON_EPOCH_END)
                     self.model.save(self.model_save_path)
-                    # Save the latest timestamp and state
-                    save_latest_timestamp(
-                        self.latest_timestamp,
-                        self.tz,
-                        self.asset_details,
-                    )
+                    save_latest_timestamp(self.latest_timestamp, self.tz, self.asset_details)
                     saveState(self.model, self.asset_details)
-                    set_processing_status(
-                        self.asset_details,
-                        "continue training next epoch",
-                    )
+                    set_training_status(self.asset_details, TrainingStatus.CONTINUE_TRAINING)
             except Timeout:
                 logger.error("Timeout occurred while trying to acquire the file lock.")
         else:
             logger.info(f"Validation loss did not improve from {self.best_val_loss}.")
             if self.best_weights:
                 self.model.set_weights(self.best_weights)
-        stateful = self.asset_details["parameters"].get("stateful", True)
+
+        # Access stateful flag via attribute access
+        stateful = self.asset_details.parameters.stateful if self.asset_details.parameters is not None else True
         if stateful:
             for layer in self.model.layers:
                 if hasattr(layer, "reset_states") and callable(layer.reset_states):
                     layer.reset_states()
-
-
 class HyperModelCheckpointCallback(tf.keras.callbacks.Callback):
     def __init__(self, stateful):
         super(HyperModelCheckpointCallback, self).__init__()
@@ -121,9 +109,8 @@ class CustomBayesianOptimization(BayesianOptimization):
         lock = FileLock(self.lock_file, timeout=1e6)
         try:
             with lock:
-                set_processing_status(
-                    self.asset_details,
-                    "Saving best model on trial end",
+                set_training_status(
+                    self.asset_details, TrainingStatus.SAVE_ON_TRAIL_END
                 )
                 best_model = self.get_best_models(num_models=1)[0]
                 best_model.save(self.model_save_path)
@@ -134,9 +121,8 @@ class CustomBayesianOptimization(BayesianOptimization):
                     self.asset_details,
                 )
                 saveState(best_model, self.asset_details)
-                set_processing_status(
-                    self.asset_details,
-                    "continue training next trail",
+                set_training_status(
+                    self.asset_details, TrainingStatus.TRAIN_NEXT_TRIAL
                 )
         except Timeout:
             logger.error("Timeout occurred while trying to acquire the file lock.")

@@ -1,50 +1,19 @@
 import psycopg2
 from psycopg2 import OperationalError
-from config import db_url, db_url_sql
-
-from sqlalchemy import (
-    MetaData,
-    Table,
-    create_engine,
-)
-from sqlalchemy.orm import sessionmaker
-
+from config import db_url
 import logging
-
-# Initialize the logger
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-# Function to set up the database engine and session
-def setup_database():
-    # Create the database engine
-    DATABASE_URL = db_url_sql
-    engine = create_engine(DATABASE_URL)
-
-    # Use MetaData to reflect the 'assets_to_forecast' table from the 'forecast' schema
-    metadata = MetaData()
-    Asset = Table(
-        "assets_to_forecast", metadata, autoload_with=engine, schema="forecast"
-    )
-
-    # Create a new session for database interactions
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    return SessionLocal, Asset
 
 
 def create_schema_and_table():
     try:
-        # Establish connection to the PostgreSQL database
         connection = psycopg2.connect(db_url)
         cursor = connection.cursor()
-
-        # Step 1: Create the 'forecast' schema if it doesn't exist
+        
         create_schema_query = "CREATE SCHEMA IF NOT EXISTS forecast;"
         cursor.execute(create_schema_query)
-        logger.info("Schema 'forecast' created (or already exists).")
 
-        # Step 2: Create the 'assets' table in the 'forecast' schema
         create_table_query = """
         CREATE TABLE IF NOT EXISTS forecast.assets_to_forecast (
             id SERIAL PRIMARY KEY,  
@@ -59,7 +28,8 @@ def create_schema_and_table():
             trainingparameters JSONB,
             latest_timestamp VARCHAR(255),
             context_length INT,
-            processing_status VARCHAR(255),
+            forecast_status VARCHAR(255),
+            train_status VARCHAR(255),
             scaler BYTEA,
             state BYTEA,
             train BOOLEAN,
@@ -68,12 +38,7 @@ def create_schema_and_table():
         );
         """
         cursor.execute(create_table_query)
-        logger.info("Table 'assets' created (or already exists).")
-
-        # Commit the changes to the database
         connection.commit()
-
-        # Close the cursor and connection
         cursor.close()
         connection.close()
 

@@ -18,6 +18,8 @@ from tensorflow.keras.optimizers import (
 from kerastuner import HyperModel
 import logging
 
+from api.models import HyperparametersModel, ParametersModel
+
 # Initialize the logger
 logger = logging.getLogger(__name__)
 
@@ -28,16 +30,19 @@ class LSTMHyperModel(HyperModel):
     ):
         self.context_length = context_length
         self.num_features = num_features
-        self.parameters = parameters or {}
-        self.hyperparameters = self.validate_hyperparameters(hyperparameters)
+        self.parameters : ParametersModel = parameters or {}
+        self.hyperparameters: HyperparametersModel = self.validate_hyperparameters(hyperparameters)
 
     def validate_hyperparameters(self, hyperparameters):
+        logger.info(hyperparameters)
         if not hyperparameters:
             return {}
-
+        if not isinstance(hyperparameters, dict):
+            hyperparameters = hyperparameters.dict()
         validated_hyperparameters = {}
-
         for key, params in hyperparameters.items():
+            if params is None:
+                continue
             if isinstance(params, dict):
                 # For hp.Int and hp.Float
                 required_keys = {"min_value", "max_value", "step"}
@@ -57,28 +62,19 @@ class LSTMHyperModel(HyperModel):
                 logger.info(
                     f"Warning: Hyperparameter '{key}' has an unsupported format. Using standard values."
                 )
-
         return validated_hyperparameters
 
     def build(self, hp):
         inputs = Input(batch_shape=(1, self.context_length, self.num_features))
         x = inputs
 
-        # Hyperparameters to tune
-        activation = hp.Choice(
-            "activation",
-            values=self.hyperparameters.get(
-                "activation", ["tanh", "relu", "sigmoid", "linear"]
-            ),
-        )
-        dense_activation = hp.Choice(
-            "dense_activation",
-            values=self.hyperparameters.get(
-                "dense_activation", ["tanh", "relu", "sigmoid", "linear"]
-            ),
-        )
+        # For Choice hyperparameters, use defaults if empty
+        activation_choices = self.hyperparameters.get("activation") or ["tanh", "relu", "sigmoid", "linear"]
+        activation = hp.Choice("activation", values=activation_choices)
 
-        # For num_lstm_layers
+        dense_activation_choices = self.hyperparameters.get("dense_activation") or ["tanh", "relu", "sigmoid", "linear"]
+        dense_activation = hp.Choice("dense_activation", values=dense_activation_choices)
+
         num_lstm_layers_params = self.hyperparameters.get("num_lstm_layers", {})
         num_lstm_layers = hp.Int(
             "num_lstm_layers",
@@ -87,7 +83,6 @@ class LSTMHyperModel(HyperModel):
             step=num_lstm_layers_params.get("step", 1),
         )
 
-        # For lstm_units
         lstm_units_params = self.hyperparameters.get("lstm_units", {})
         lstm_units = hp.Int(
             "lstm_units",
@@ -96,7 +91,6 @@ class LSTMHyperModel(HyperModel):
             step=lstm_units_params.get("step", 32),
         )
 
-        # Similarly handle other hyperparameters
         dropout_rate_params = self.hyperparameters.get("dropout_rate", {})
         dropout_rate = hp.Float(
             "dropout_rate",
@@ -105,9 +99,7 @@ class LSTMHyperModel(HyperModel):
             step=dropout_rate_params.get("step", 0.1),
         )
 
-        recurrent_dropout_rate_params = self.hyperparameters.get(
-            "recurrent_dropout_rate", {}
-        )
+        recurrent_dropout_rate_params = self.hyperparameters.get("recurrent_dropout_rate", {})
         recurrent_dropout_rate = hp.Float(
             "recurrent_dropout_rate",
             min_value=recurrent_dropout_rate_params.get("min_value", 0.0),
@@ -139,25 +131,17 @@ class LSTMHyperModel(HyperModel):
             sampling="log",
         )
 
-        optimizer_type = hp.Choice(
-            "optimizer_type",
-            values=self.hyperparameters.get(
-                "optimizer_type",
-                ["adam", "sgd", "rmsprop", "adagrad", "adadelta", "adamax", "nadam"],
-            ),
-        )
+        optimizer_type_choices = self.hyperparameters.get("optimizer_type") or ["adam", "sgd", "rmsprop", "adagrad", "adadelta", "adamax", "nadam"]
+        optimizer_type = hp.Choice("optimizer_type", values=optimizer_type_choices)
 
-        use_batch_norm = hp.Boolean(
-            "use_batch_norm", default=self.hyperparameters.get("use_batch_norm", False)
-        )
+        use_batch_norm = hp.Boolean("use_batch_norm", default=self.hyperparameters.get("use_batch_norm", False))
 
-        # New: Binary and multi-class parameters
-        binary_encoding = self.parameters.get("binary_encoding", False)
-        num_classes = self.parameters.get("num_classes", None)
+        # Use attribute access on self.parameters (which is now a ParametersModel)
+        binary_encoding = self.parameters.binary_encoding
+        num_classes = self.parameters.num_classes
 
-        # Build the model using these hyperparameters
         for layer_num in range(num_lstm_layers):
-            return_seq = True if layer_num < num_lstm_layers - 1 else False
+            return_seq = layer_num < num_lstm_layers - 1
             lstm_layer = LSTM(
                 lstm_units,
                 activation=activation,
@@ -166,9 +150,7 @@ class LSTMHyperModel(HyperModel):
                 dropout=dropout_rate,
                 recurrent_dropout=recurrent_dropout_rate,
             )
-
             x = lstm_layer(x)
-
             if use_batch_norm:
                 x = BatchNormalization()(x)
 
@@ -179,7 +161,6 @@ class LSTMHyperModel(HyperModel):
             if dropout_rate > 0:
                 x = Dropout(dropout_rate)(x)
 
-        # Output layer logic
         if binary_encoding:
             outputs = Dense(1, activation="sigmoid")(x)
             loss = "binary_crossentropy"
@@ -188,7 +169,8 @@ class LSTMHyperModel(HyperModel):
             loss = "sparse_categorical_crossentropy"
         else:
             outputs = Dense(1)(x)
-            loss = self.parameters.get("loss", "mean_squared_error")
+            # Use attribute on model: if loss is not provided then fall back to MSE
+            loss = self.parameters.loss if self.parameters.loss is not None else "mean_squared_error"
 
         model = Model(inputs, outputs)
 
@@ -201,10 +183,8 @@ class LSTMHyperModel(HyperModel):
             "adamax": Adamax,
             "nadam": Nadam,
         }
-
         optimizer_class = optimizer_mapping[optimizer_type]
         optimizer = optimizer_class(learning_rate=learning_rate)
 
         model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy"])
-
         return model

@@ -4,15 +4,15 @@ import os
 import time
 import numpy as np
 
+from api.models import AssetModel, ForecastStatus
 from app.get_data.api_calls import (
     load_latest_timestamp,
     save_latest_timestamp,
-    load_contextlength,
     load_scaler,
     loadState,
     saveState,
-    get_processing_status,
-    set_processing_status,
+    get_forecast_status,
+    set_forecast_status,
 )
 from app.get_data.fetch_and_format_data import (
     fetch_pandas_data,
@@ -27,24 +27,20 @@ import sys
 from api.api_calls import get_asset_by_id
 import logging
 from filelock import FileLock, Timeout
-
+from dateutil import parser
 # Initialize the logger
 logger = logging.getLogger(__name__)
 last_processed_time = 0  # Initialize the last processed time
 timestamp_diff_buffer = timedelta(days=5)
 
 
-def forecast(asset_details, asset_id):
+def forecast(asset: AssetModel, asset_id):
 
     process_lock = threading.Lock()
-    # Initialize database connection and ORM models here
-
-    forecast_length = asset_details["forecast_length"]
-    target_column = asset_details["target_attribute"]
-    feature_columns = asset_details["feature_attributes"]
+ 
     tz = pytz.timezone("Europe/Berlin")
     model_filename = (
-        f"/tmp/LSTM_model_{asset_id}_{target_column}_{forecast_length}.keras"
+        f"/tmp/LSTM_model_{asset_id}_{asset.target_attribute}_{asset.forecast_length}.keras"
     )
     batch_size = 1  # Setting batch size to 1 for stateful LSTM
 
@@ -56,35 +52,23 @@ def forecast(asset_details, asset_id):
             lock = FileLock(lock_file, timeout=1e6)
             try:
                 with lock:
-                    parameters = asset_details.get("parameters", {})
-                    binary_encoding = parameters.get("binary_encoding", False)
-                    num_classes = parameters.get("num_classes", None)
-
-                    processing_status = get_processing_status(asset_details)
+                    processing_status = get_forecast_status(asset)
                     if "Saving" in processing_status:
                         logger.info(
                             "Model is currently being saved in training. dont change status"
                         )
 
-                    elif (
-                        "training" in processing_status
-                        and processing_status != "done_training"
-                    ):
-                        set_processing_status(
-                            asset_details,
-                            "forecasting_and_training",
-                        )
                     else:
-                        set_processing_status(asset_details, "forecasting")
+                        set_forecast_status(asset, ForecastStatus.RUNNING)
                     logger.info(f"Loading existing model from {model_filename}")
                     model = load_model(model_filename)
-                    loadState(model, asset_details)
+                    loadState(model, asset)
                     # Load the scaler
-                    scaler = load_scaler(asset_details)
+                    scaler = load_scaler(asset)
 
-                    timestep_in_file = load_latest_timestamp(asset_details)
-                    timestep_in_file = datetime.fromisoformat(timestep_in_file)
-                    context_length = load_contextlength(asset_details)
+                    timestep_in_file = load_latest_timestamp(asset)
+                    timestep_in_file = parser.parse(timestep_in_file)
+                    
 
                     new_end_date = datetime.now(tz)
                     logger.info(f"timestep_in_file {timestep_in_file}")
@@ -99,8 +83,8 @@ def forecast(asset_details, asset_id):
                         asset_id,
                         new_start_date,
                         new_end_date,
-                        target_column,
-                        feature_columns,
+                        asset.target_attribute,
+                        asset.feature_attributes,
                     )
 
                     if df.empty:
@@ -109,19 +93,15 @@ def forecast(asset_details, asset_id):
 
                     X_update, X_last, new_next_timestamp, last_y_timestamp = (
                         prepare_data_for_forecast(
-                            asset_details,
+                            asset,
                             df,
-                            context_length,
-                            forecast_length,
                             scaler,
                             timestep_in_file,
-                            asset_details["target_attribute"],
-                            asset_details["feature_attributes"],
                         )
                     )
                     timestamp_diff_buffer = (
                         new_next_timestamp - last_y_timestamp
-                    ) * context_length
+                    ) * asset.context_length
                     logger.info("Latest timestamp updated.")
                     logger.info("Prepared data")
                     if X_update is None and X_last is None:
@@ -138,7 +118,7 @@ def forecast(asset_details, asset_id):
                         model.summary()
                         for i in range(len(X_update)):
                             x = X_update[i].reshape(
-                                (1, context_length, X_update.shape[2])
+                                (1, asset.context_length, X_update.shape[2])
                             )  # Shape: (1, context_length, features)
                             _ = model.predict(
                                 x, batch_size=batch_size
@@ -155,7 +135,7 @@ def forecast(asset_details, asset_id):
                             X_last, batch_size=batch_size
                         )
                         # Format the prediction based on the type of task
-                        if binary_encoding:
+                        if asset.parameters.binary_encoding:
                             # Binary classification
                             predicted_class = next_prediction_scaled
                             predicted_class_label = (
@@ -165,7 +145,7 @@ def forecast(asset_details, asset_id):
                                 f"Predicted class (binary): {predicted_class_label}"
                             )
                             formatted_prediction = predicted_class_label
-                        if num_classes:
+                        if asset.parameters.num_classes:
                             # Multi-class classification
                             logger.info(
                                 f"Raw probabilities (multi-class): {next_prediction_scaled[0]}"
@@ -179,7 +159,7 @@ def forecast(asset_details, asset_id):
                             formatted_prediction = predicted_class[0]
                         else:
                             # Regression
-                            next_prediction = scaler[target_column].inverse_transform(
+                            next_prediction = scaler[asset.target_attribute].inverse_transform(
                                 next_prediction_scaled
                             )
                             logger.info(
@@ -194,23 +174,23 @@ def forecast(asset_details, asset_id):
                             asset_id,
                             new_next_timestamp,
                             formatted_prediction,
-                            target_column,
-                            forecast_length,
+                            asset.target_attribute,
+                            asset.forecast_length,
                         )
 
                     else:
                         logger.info("X_last is None. Skipping forecasting.")
 
                     # Save the updated model after processing
-                    processing_status = get_processing_status(asset_details)
+                    processing_status = get_forecast_status(asset)
                     if "Saving" in processing_status:
                         logger.info(
                             "Model is currently being saved in training. Skipping saving."
                         )
                     else:
-                        save_latest_timestamp(last_y_timestamp, tz, asset_details)
+                        save_latest_timestamp(last_y_timestamp, tz, asset)
                         model.save(model_filename)
-                        saveState(model, asset_details)
+                        saveState(model, asset)
                         logger.info(f"Model saved to {model_filename}.")
             except Timeout:
                 logger.error("Timeout occurred while trying to acquire the file lock.")
@@ -270,7 +250,7 @@ def forecast(asset_details, asset_id):
                     last_processed_time = current_time
                     logger.info(f"Recieved message:{message}")
                     try:
-                        if get_asset_by_id(id=asset_details["id"]) is None:
+                        if get_asset_by_id(id=asset.id) is None:
                             logger.info("Asset does not exist")
                             sys.exit()
                         perform_forecast()
