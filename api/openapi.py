@@ -12,7 +12,7 @@ import re
 from api.api_calls import get_asset_by_id
 from app.data_to_eliona.add_forecast_attributes import get_asset_id_by_gai
 from app.forecast.forecast import forecast
-from app.get_data.api_calls import set_forecast_bool, set_forecast_status, set_train_bool
+from app.get_data.api_calls import set_forecast_bool, set_forecast_status, set_train_bool, set_training_status
 from app.train_and_retrain.train_and_retrain import train_and_retrain
 from api.models import AssetModel, ForecastStatus, ModelModel, ThreadInfo, TrainingStatus
 import threading
@@ -79,11 +79,11 @@ def create_api(DATABASE_URL: str) -> FastAPI:
 
     @app.post("/v1/assets/{id}/forecast/stop", response_model=dict)
     def stop_forecast(id: int):
-        if id not in app.state.thread_map or not app.state.thread_map[id].forecast_running:
-            raise HTTPException(status_code=404, detail="No running forecast thread for this asset")
         asset = get_asset_by_id(id=id)
         set_forecast_bool(asset=asset, bool=False)
         set_forecast_status(asset, ForecastStatus.STOPPING)
+        if id not in app.state.thread_map or not app.state.thread_map[id].forecast_running:
+            raise HTTPException(status_code=404, detail="No running forecast thread for this asset")
         app.state.thread_map[id].forecast_running = False
         return {"message": f"Signaled forecast thread for asset {id} to stop"}
         
@@ -114,10 +114,11 @@ def create_api(DATABASE_URL: str) -> FastAPI:
 
     @app.post("/v1/assets/{id}/train/stop", response_model=dict)
     def stop_training(id: int):
-        if id not in app.state.thread_map or not app.state.thread_map[id].train_running:
-            raise HTTPException(status_code=404, detail="No running training thread for this asset")
         asset = get_asset_by_id(id=id)
         set_train_bool(asset=asset, bool=False)
+        set_training_status(asset, TrainingStatus.STOPPING)
+        if id not in app.state.thread_map or not app.state.thread_map[id].train_running:
+            raise HTTPException(status_code=404, detail="No running training thread for this asset")
         app.state.thread_map[id].train_running = False
         return {"message": f"Signaled training thread for asset {id} to stop"}
 
