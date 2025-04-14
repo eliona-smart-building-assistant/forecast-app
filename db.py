@@ -1,14 +1,15 @@
+import os
 import psycopg2
 from psycopg2 import OperationalError
-from config import db_url
 import logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+DATABASE_URL = os.getenv("CONNECTION_STRING")
 def create_schema_and_table():
     try:
-        connection = psycopg2.connect(db_url)
+        connection = psycopg2.connect(DATABASE_URL)
         cursor = connection.cursor()
         
         create_schema_query = "CREATE SCHEMA IF NOT EXISTS forecast;"
