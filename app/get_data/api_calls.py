@@ -23,7 +23,7 @@ def saveState(model, asset:AssetModel):
                 h_state, c_state = layer.states
                 states[layer.name] = [h_state.numpy(), c_state.numpy()]
             else:
-                logger.info(f"Warning: Layer '{layer.name}' has no initialized states.")
+                logger.warning(f"Warning: Layer '{layer.name}' for {asset.id} has no initialized states.")
 
     serialized_states = pickle.dumps(states)
     update_asset(
@@ -39,7 +39,7 @@ def loadState(model, asset:AssetModel):
         raw_state = base64.b64decode(asset.state)
         states = pickle.loads(raw_state)
     else:
-        logger.info("No saved states found for the given asset.")
+        logger.warning(f"No saved states found for the given asset {asset.id}.")
         return
 
     for layer in model.layers:
@@ -49,16 +49,12 @@ def loadState(model, asset:AssetModel):
                 h_state, c_state = layer.states
                 h_state.assign(h_state_value)
                 c_state.assign(c_state_value)
-                logger.info(f"States loaded into layer '{layer.name}'")
             else:
-                logger.info(f"No saved state for layer '{layer.name}'")
+                logger.warning(f"No saved state for layer '{layer.name}' for asset {asset.id}.")
     return model
 
 
-
-
 def save_latest_timestamp(timestamp, tz, asset: AssetModel):
-
     if isinstance(timestamp, datetime) and timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=tz)
     elif isinstance(timestamp, np.datetime64):
@@ -74,11 +70,7 @@ def load_latest_timestamp(
     return asset.latest_timestamp
 
 
-
-
-
 def load_datalength(asset:  AssetModel):
-    logger.info(asset)
     asset = get_asset_by_id(asset.id)
     return asset.datalength
 
@@ -104,37 +96,36 @@ def load_scaler(asset: AssetModel):
         raw_scaler = base64.b64decode(asset.scaler)  
         return pickle.loads(raw_scaler)
     else:
-        logger.info("No scaler found for the given asset.")
+        logger.warning(f"No scaler found for the given asset {asset.id}.")
         return None
 
 
 def save_parameters(parameters, asset: AssetModel):
-
     existing_parameters = asset.parameters or {}
-
     if parameters:
         existing_parameters.update(parameters)
     update_asset(id=asset.id, parameters=existing_parameters)
 
-    asset.parameters = existing_parameters
 
 
-def set_forecast_status(asset: AssetModel, status: ForecastStatus):
-    update_asset(id=asset.id, forecast_status=status.value)
+def set_forecast_status(asset: AssetModel, status):
+    if isinstance(status, ForecastStatus):
+        status_value = status.value
+    else:
+        status_value = status
+    update_asset(id=asset.id, forecast_status=status_value)
 
 
-def get_forecast_status(asset: AssetModel):
-    updated_asset = get_asset_by_id(asset.id)
-    return updated_asset.forecast_status.value
-
-
-def set_training_status(asset: AssetModel, status: TrainingStatus):
-    update_asset(id=asset.id, train_status=status.value)
-
+def set_training_status(asset: AssetModel, status):
+    if isinstance(status, TrainingStatus):
+        status_value = status.value
+    else:
+        status_value = status
+    update_asset(id=asset.id, train_status=status_value)
 
 def get_training_status(asset: AssetModel):
     updated_asset = get_asset_by_id(asset.id)
-    return updated_asset.train_status.value
+    return updated_asset.train_status
 
 def set_forecast_bool(asset: AssetModel, bool: bool):
     update_asset(id=asset.id, forecast=bool)

@@ -7,11 +7,6 @@ import pandas as pd
 
 ELIONA_API_KEY = os.getenv("API_TOKEN")
 ELIONA_HOST = os.getenv("API_ENDPOINT")
-import logging
-
-# Initialize the logger
-logger = logging.getLogger(__name__)
-
 
 def write_into_eliona(asset_id, timestamp, data, name, prediction_length):
     configuration = Configuration(
@@ -22,12 +17,8 @@ def write_into_eliona(asset_id, timestamp, data, name, prediction_length):
 
         forecast_name_suffix = f"{name}_forecast_{prediction_length}"
         data_dict = {f"{forecast_name_suffix}": float(data)}
-        logger.info(f"{data_dict}")
-
-        # Ensure timestamp is in ISO format with timezone
         if isinstance(timestamp, pd.Timestamp):
             if timestamp.tzinfo is None:
-                # Localize to UTC if no timezone is present
                 timestamp = timestamp.tz_localize("UTC")
             timestamp = timestamp.isoformat()
         elif isinstance(timestamp, datetime):
@@ -38,7 +29,4 @@ def write_into_eliona(asset_id, timestamp, data, name, prediction_length):
         data = Data(
             asset_id=asset_id, subtype="output", timestamp=timestamp, data=data_dict
         )
-        logger.info(f"{data}")
-
-        # Send the data to the API
         data_api.put_data(data)

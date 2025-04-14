@@ -6,28 +6,36 @@ from sqlalchemy import Row
 import enum
 
 class ForecastStatus(str, enum.Enum):
-    NEW = "new"
-    IN_PROGRESS = "in_progress"
-    DONE = "done"
-    ERROR = "error"
-    RUNNING = "running"
+    INACTIVE = "inactive"
+    STARTING = "starting"
+    WAITING_FOR_DATA = "waiting for next incoming data"
+    SIGNAL_RECIEVED = "recieved signal to start forecast"
+    FETCHING = "fetching relevant data for forecast"
+    PREPARING = "preparing data for forecast"
+    PREDICTING="Predicting"
+    WRITING = "writing forecast to Eliona"
+    SAVING = "saving state and model"
+    STOPPING = "stopping"
+    ASSET_NOT_FOUND = "asset not found"
+    
+    
 
 class TrainingStatus(str, enum.Enum):
-    NEW = "new"
-    IN_PROGRESS = "in_progress"
-    DONE = "done"
-    ERROR = "error"
-    NoData = "not enough data for training"
-    START_TRAINING = "start_training"
-    COMPLETED = "done_training"
+    INACTIVE = "inactive"
+    STARTING = "starting"
+    ADD_FORECAST_ATTRIBUTES = "adding forecast attributes"
+    ASSET_NOT_FOUND = "asset not found"
+    FETCHING = "fetching data for training"
     NOT_ENOUGH_DATA = "not enough data for training"
-    START_RE_TRAINING = "start_re_training"
-    SAVE_ON_EPOCH_END = "Saving best model on epoch end"
-    CONTINUE_TRAINING = "continue training next epoch"
-    SAVE_ON_TRAIL_END = "Saving best model on trial end"
-    TRAIN_NEXT_TRIAL = "continue training next trial"
-    START_HYPER_TRAINING = "start_hyperparameter_search_training"
-
+    COMPLETED = "training completed successfully waiting for enough data to retrain"
+    START_TRAINING = "starting training"
+    START_RE_TRAINING = "starting retraining"
+    STPPING = "stopping"
+    PREPARING = "preparing data for training"
+    START_HYPER_SEARCH = "running first trail of hyperparameter search (forecast can start when first trail is done)"
+    START_TEST_ON_BEST_MODELS = "running best models on test data to get best hyperparameters"
+    SAVE_ON_EPOCH_END = "Save training status on end of epoch"
+    SAVE_ON_TRAIL_END = "Save training status on end of trail"
 class ParametersModel(BaseModel):
     was_empty: bool = Field(default=True, description="True if no custom parameters were provided")
     num_classes: Optional[int] = None
@@ -52,7 +60,7 @@ class ParametersModel(BaseModel):
 class TrainingParametersModel(BaseModel):
     was_empty: bool = Field(default=True, description="True if no custom training parameters were provided")
     epochs: int = 200
-    patience: int = 10
+    patience: int = 5
     sleep_time: int = 3600
     percentage_data_when_to_retrain: float = 1.15
     validation_split: float = 0.2
@@ -72,7 +80,7 @@ class HyperparametersModel(BaseModel):
     optimizer_type: List[str] = Field(default_factory=list)
     use_batch_norm: Optional[bool] = None
     percent_data: float = 0.1
-    max_trials: int = 100
+    max_trails: int = 100
     best_trails_percent: Optional[float] = None
 
 class AssetModel(BaseModel):
@@ -92,8 +100,8 @@ class AssetModel(BaseModel):
     latest_timestamp: Optional[str] = None
     scaler: Optional[str] = ""
     state: Optional[str] = None
-    forecast_status: ForecastStatus = ForecastStatus.NEW
-    train_status: TrainingStatus = TrainingStatus.NEW
+    forecast_status: Union[ForecastStatus, str] = ForecastStatus.INACTIVE
+    train_status: Union[TrainingStatus, str] = TrainingStatus.INACTIVE
 
     @field_validator("parameters", mode="before", check_fields=True)
     def set_default_parameters(cls, v):
@@ -101,13 +109,35 @@ class AssetModel(BaseModel):
 
     @classmethod
     def from_orm(cls, asset):
-        asset_dict = asset._asdict() if isinstance(asset, Row) else dict(asset)
+        asset_dict = asset._asdict() if hasattr(asset, "_asdict") else dict(asset)
         if asset_dict.get("scaler"):
             asset_dict["scaler"] = base64.b64encode(asset_dict["scaler"]).decode("utf-8")
         if asset_dict.get("state"):
             asset_dict["state"] = base64.b64encode(asset_dict["state"]).decode("utf-8")
-        return cls(**asset_dict)
 
+        fs = asset_dict.get("forecast_status")
+        if fs is None:
+            asset_dict["forecast_status"] = ForecastStatus.INACTIVE
+        elif isinstance(fs, str):
+            try:
+                asset_dict["forecast_status"] = ForecastStatus(fs)
+            except ValueError:
+                asset_dict["forecast_status"] = fs  # leave it as string if invalid
+        else:
+            asset_dict["forecast_status"] = fs
+
+        ts = asset_dict.get("train_status")
+        if ts is None:
+            asset_dict["train_status"] = TrainingStatus.INACTIVE
+        elif isinstance(ts, str):
+            try:
+                asset_dict["train_status"] = TrainingStatus(ts)
+            except ValueError:
+                asset_dict["train_status"] = ts
+        else:
+            asset_dict["train_status"] = ts
+
+        return cls(**asset_dict)
     def to_db_model(self):
         asset_dict = self.model_dump()
         asset_dict.pop("train_status", None)
@@ -120,13 +150,11 @@ class AssetModel(BaseModel):
                         asset_dict[field] = base64.b64decode(value.encode("utf-8"))
                     except Exception as e:
                         asset_dict[field] = None
-                # If already bytes, leave them as is.
             else:
                 asset_dict[field] = None
         return asset_dict
 
     class Config:
-        # This tells Pydantic to use the enum value (e.g., "new") when serializing enum fields.
         use_enum_values = True
 
 class ModelModel(BaseModel):
@@ -152,7 +180,6 @@ class ModelModel(BaseModel):
         return cls(filename=filename, exists=True)
 
 class ThreadInfo(BaseModel):
-    """Represents forecast and training thread details for a single asset."""
     forecast_running: bool = False
     forecast_thread_id: Optional[int] = None
     train_running: bool = False

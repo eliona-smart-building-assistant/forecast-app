@@ -10,13 +10,10 @@ import logging
 
 from api.models import AssetModel
 
-# Initialize the logger
 logger = logging.getLogger(__name__)
-# Set up configuration for the Eliona API
+
 configuration = eliona.api_client2.Configuration(host=os.getenv("API_ENDPOINT"))
 configuration.api_key["ApiKeyAuth"] = os.getenv("API_TOKEN")
-
-# Create an instance of the API client
 api_client = eliona.api_client2.ApiClient(configuration)
 data_api = DataApi(api_client)
 
@@ -26,17 +23,15 @@ def get_trend_data(asset_id, start_date, end_date):
     from_date = start_date.isoformat()
     to_date = end_date.isoformat()
     try:
-        logger.info(f"Fetching data for asset {asset_id} from {from_date} to {to_date}")
         result = data_api.get_data_trends(
             from_date=from_date,
             to_date=to_date,
             asset_id=asset_id,
             data_subtype="input",
         )
-        logger.info(f"Received {len(result)} data points")
         return result
     except ApiException as e:
-        logger.info(f"Exception when calling DataApi->get_data_trends: {e}")
+        logger.info(f"Exception when calling DataApi->get_data_trends {asset_id}: {e}")
         return None
 
 
@@ -53,34 +48,21 @@ def fetch_data_in_chunks(asset_id, start_date, end_date):
 
 
 def convert_to_pandas(data):
-    # Dictionary to hold the rows, using the timestamp as the key
     formatted_data = {}
 
     for entry in data:
-        # Extract timestamp and data
         timestamp = entry.timestamp
         data_dict = entry.data
 
-        # If this timestamp already exists, update the existing row
         if timestamp in formatted_data:
             formatted_data[timestamp].update(data_dict)
         else:
-            # Create a new row for this timestamp
             formatted_data[timestamp] = data_dict
 
-    # Convert the dictionary to a pandas DataFrame
     df = pd.DataFrame.from_dict(formatted_data, orient="index")
-
-    # Set the index (timestamp) as a proper datetime index
     df.index = pd.to_datetime(df.index, utc=True)
-
-    # Convert the index to the desired timezone (e.g., Europe/Berlin)
     df.index = df.index.tz_convert("Europe/Berlin")
-
-    # **Optional: Sort the DataFrame by index (timestamp)**
     df.sort_index(inplace=True)
-
-    # Reset index to have 'timestamp' as a column
     df.reset_index(inplace=True)
     df.rename(columns={"index": "timestamp"}, inplace=True)
 
@@ -94,22 +76,15 @@ def fetch_pandas_data(
     target_attribute,
     feature_attributes,
 ):
-    # Fetch all data without filtering by attributes
     data = fetch_data_in_chunks(asset_id, start_date, end_date)
-
-    # Convert data to pandas DataFrame
     df = convert_to_pandas(data)
-
-    # Ensure 'timestamp' is datetime and sorted
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df.sort_values("timestamp", inplace=True)
     df.reset_index(drop=True, inplace=True)
-
-    # Initialize feature_attributes if None
+    
     if feature_attributes is None:
         feature_attributes = []
 
-    # List of possible time-based features with sine and cosine
     time_features = [
         "second_of_minute_sin",
         "second_of_minute_cos",
@@ -127,20 +102,16 @@ def fetch_pandas_data(
         "day_of_year_cos",
     ]
 
-    # Identify which time-based features are requested
     requested_time_features = [
         feat for feat in feature_attributes if feat in time_features
     ]
 
-    # Remove time-based features from feature_attributes (since we'll process them separately)
     feature_attributes = [
         feat for feat in feature_attributes if feat not in time_features
     ]
 
-    # Select only the target and remaining feature attributes
     attributes = [target_attribute] + feature_attributes
 
-    # Initialize sets and dictionaries to keep track of computations
     computed_time_components = set()
     base_feature_periods = {
         "second_of_minute": 60,
@@ -152,22 +123,17 @@ def fetch_pandas_data(
         "day_of_year": 366,
     }
 
-    # Process time-based features
     for feat in requested_time_features:
-        # Check if the feature ends with '_sin' or '_cos'
         if feat.endswith("_sin"):
-            base_feat = feat[:-4]  # Remove '_sin'
+            base_feat = feat[:-4]  
             transformation = "sin"
         elif feat.endswith("_cos"):
-            base_feat = feat[:-4]  # Remove '_cos'
+            base_feat = feat[:-4]  
             transformation = "cos"
         else:
-            # Not a recognized time feature with '_sin' or '_cos'
             continue
 
-        # If the base time component has not been computed yet, compute it
         if base_feat not in computed_time_components:
-            # Compute the time component
             if base_feat == "second_of_minute":
                 df[base_feat] = df["timestamp"].dt.second
             elif base_feat == "minute_of_hour":
@@ -175,7 +141,7 @@ def fetch_pandas_data(
             elif base_feat == "hour_of_day":
                 df[base_feat] = df["timestamp"].dt.hour
             elif base_feat == "day_of_week":
-                df[base_feat] = df["timestamp"].dt.weekday  # Monday=0, Sunday=6
+                df[base_feat] = df["timestamp"].dt.weekday  
             elif base_feat == "day_of_month":
                 df[base_feat] = df["timestamp"].dt.day
             elif base_feat == "month_of_year":
@@ -183,49 +149,37 @@ def fetch_pandas_data(
             elif base_feat == "day_of_year":
                 df[base_feat] = df["timestamp"].dt.dayofyear
             else:
-                continue  # Unrecognized base feature
+                continue 
             computed_time_components.add(base_feat)
 
-        # Get the period associated with the base feature
         period = base_feature_periods.get(base_feat)
         if period is None:
-            continue  # Unrecognized base feature, skip
+            continue  
 
-        # Apply the sine or cosine transformation
         if transformation == "sin":
             df[feat] = np.sin(2 * np.pi * df[base_feat] / period)
         elif transformation == "cos":
             df[feat] = np.cos(2 * np.pi * df[base_feat] / period)
 
-        # Add the transformed feature to the attributes list
         attributes.append(feat)
 
-        # Optionally, drop the base time component column if both transformations are computed or not needed
-        # Check if both '_sin' and '_cos' variants are requested
         other_transformation = "cos" if transformation == "sin" else "sin"
         other_feat = base_feat + "_" + other_transformation
         if (other_feat in requested_time_features and other_feat in df.columns) or (
             other_feat not in requested_time_features
         ):
-            # Both transformations have been computed or the other is not requested; drop base feature
             df.drop(columns=[base_feat], inplace=True)
 
-    # Handle missing attributes by filling with zeros
     missing_attributes = [col for col in attributes if col not in df.columns]
     for col in missing_attributes:
         df[col] = 0
 
-    # Keep only the relevant columns
     df = df[["timestamp"] + attributes]
 
-    # Forward fill missing values for feature attributes (if any)
     if feature_attributes:
         df[feature_attributes] = df[feature_attributes].ffill()
 
-    # Keep only the rows where the target attribute is not missing
     df = df[df[target_attribute].notna()]
-
-    # Drop any remaining NaN values
     df.dropna(inplace=True)
 
     return df
@@ -238,50 +192,41 @@ def prepare_data(
     data = data.sort_values("timestamp").reset_index(drop=True)
     all_attributes = [asset.target_attribute] + asset.feature_attributes
 
-    # Initialize a scaler for each attribute and scale the data
     scalers = {}
     scaled_data = pd.DataFrame()
     for attr in all_attributes:
         scaler = MinMaxScaler(feature_range=(0, 1))
+        
         values = data[attr].values.reshape(-1, 1)
 
         if attr == asset.target_attribute and asset.parameters and (asset.parameters.binary_encoding or asset.parameters.num_classes):
-            scaled_values = values.flatten()  # Keep values as-is
-            logger.info(f"Skipping scaling for target attribute: {asset.target_attribute}")
+            scaled_values = values.flatten() 
         else:
             scaled_values = scaler.fit_transform(values).flatten()
 
         scaled_data[attr] = scaled_values
-        scalers[attr] = scaler  # Store the scaler for each attribute
+        scalers[attr] = scaler  
 
     X = []
     Y = []
 
-    # Calculate the number of samples that can be generated
     total_samples = len(scaled_data) - asset.context_length - asset.forecast_length + 1
 
-    # Loop over the dataset to create sequences
     for i in range(total_samples):
-        # Extract input sequences for all attributes
         x = scaled_data[all_attributes].iloc[i : i + asset.context_length].values
-        # Extract the target value that is 'forecast_length' steps ahead
         y_index = i + asset.context_length + asset.forecast_length - 1
         if y_index < len(scaled_data):
             y = scaled_data[asset.target_attribute].iloc[y_index]
             X.append(x)
             Y.append(y)
         else:
-            break  # Break if the target index is out of bounds
+            break  
 
-    # Convert lists to numpy arrays
-    X = np.array(X)  # Shape: [samples, context_length, num_features]
-    Y = np.array(Y)  # Shape: [samples, ]
+    X = np.array(X)  
+    Y = np.array(Y)  
 
-    # Extract the last Y's timestamp
     last_timestamp = data["timestamp"].iloc[len(data) - asset.forecast_length]
     last_timestamp = pd.to_datetime(last_timestamp)
-    logger.info(f"X_shape {X.shape}")
-    logger.info(f"Y_shape {Y.shape}")
     return X, Y, scalers, last_timestamp
 
 
@@ -292,63 +237,45 @@ def prepare_data_for_forecast(
     last_timestamp,
 ):
  
-    # Ensure the data is sorted by timestamp
     data = data.sort_values("timestamp").reset_index(drop=True)
-
-    # Convert 'timestamp' to datetime if not already
     data["timestamp"] = pd.to_datetime(data["timestamp"])
 
-    # Combine target and feature attributes
     if asset.feature_attributes is None:
         asset.feature_attributes = []
     all_attributes = [asset.target_attribute] + asset.feature_attributes
     scaled_data = pd.DataFrame()
 
-    # Use the loaded scalers to transform values
     for attr in all_attributes:
         if attr in data.columns:
             values = data[attr].values.reshape(-1, 1)
-
             if attr == asset.target_attribute and (asset.parameters.binary_encoding or asset.parameters.num_classes):
-                # Skip scaling for binary or multi-class targets
                 scaled_values = values.flatten()
-                logger.info(
-                    f"Skipping scaling for target attribute: {asset.target_attribute} (binary/multi-class)"
-                )
             elif attr in scalers:
                 scaler = scalers[attr]
                 try:
                     scaled_values = scaler.transform(values).flatten()
                 except Exception as e:
-                    logger.warning(f"Scaler issue for '{attr}': {e}. Using raw values.")
+                    logger.warning(f"Scaler issue for {asset.id} '{attr}': {e}. Using raw values.")
                     scaled_values = values.flatten()
             else:
-                logger.warning(f"No scaler found for '{attr}'. Using raw values.")
+                logger.warning(f"No scaler found for {asset.id} '{attr}'. Using raw values.")
                 scaled_values = values.flatten()
 
             scaled_data[attr] = scaled_values
         else:
-            logger.warning(f"Attribute '{attr}' not found in data. Filling with zeros.")
-            scaled_data[attr] = 0.0  # Or handle appropriately
-
-    # Find the index corresponding to last_timestamp
+            logger.warning(f"Attribute '{attr}' not found in data {asset.id}. Filling with zeros.")
+            scaled_data[attr] = 0.0 
+            
     indices = data[data["timestamp"] > last_timestamp].index
-
     if len(indices) == 0:
-        logger.info("No new data available after the last timestamp.")
+        logger.warn(f"No new data available after the last timestamp for {asset.id}")
         return None, None, None, None
 
     last_index = indices[0]
-    logger.info(f"last_timestamp {last_timestamp}")
-    logger.info(f"last_index {last_index}")
-    logger.info(f"timestamp at last_index {data['timestamp'].iloc[last_index]}")
-
-    # Start index to include context_length steps before last_index
     start_index = last_index - asset.context_length
     if start_index < 0:
         start_index = 0
 
-    # Prepare sequences
     X_new = []
     target_timestamps = []
 
@@ -359,12 +286,11 @@ def prepare_data_for_forecast(
         target_timestamps.append(timestamp)
 
     if not X_new:
-        logger.info("No valid input sequences found after filtering.")
+        logger.info(f"No valid input sequences found after filtering for {asset.id}")
         return None, None, None, None
 
-    X_new = np.array(X_new)  # Shape: [samples, context_length, num_features]
+    X_new = np.array(X_new) 
 
-    # Separate X_new into X_update and X_last
     if len(X_new) > 1:
         X_update = X_new[:-1]
         X_last = X_new[-1].reshape((1, asset.context_length, len(all_attributes)))
@@ -374,7 +300,6 @@ def prepare_data_for_forecast(
         X_last = X_new[-1].reshape((1, asset.context_length, len(all_attributes)))
         last_y_timestamp_new = target_timestamps[-1]
 
-    # Calculate new_next_timestamp
     if len(data) >= 2:
         timestamp_diffs = data["timestamp"].diff().dropna()
         timestamp_diff = timestamp_diffs.mean()
@@ -383,8 +308,6 @@ def prepare_data_for_forecast(
         )
     else:
         new_next_timestamp = None
-        logger.info("Insufficient data for timestamp calculation.")
+        logger.info(f"Insufficient data for timestamp calculation for {asset.id}")
 
-    logger.info(f"X_update_shape {X_update.shape}")
-    logger.info(f"X_last_shape {X_last.shape}")
     return X_update, X_last, new_next_timestamp, last_y_timestamp_new

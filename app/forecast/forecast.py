@@ -1,204 +1,26 @@
-from datetime import datetime, timedelta
-import pytz
+from datetime import  timedelta
 import os
 import time
-import numpy as np
-
 from api.models import AssetModel, ForecastStatus
-from app.get_data.api_calls import (
-    load_latest_timestamp,
-    save_latest_timestamp,
-    load_scaler,
-    loadState,
-    saveState,
-    get_forecast_status,
-    set_forecast_status,
-)
-from app.get_data.fetch_and_format_data import (
-    fetch_pandas_data,
-    prepare_data_for_forecast,
-)
-from app.data_to_eliona.write_into_eliona import write_into_eliona
-from tensorflow.keras.models import load_model
+from app.forecast.perform_forecast import perform_forecast
+from app.get_data.api_calls import get_forecast_bool, set_forecast_status
 import websocket
 import ssl
 import threading
 import sys
 from api.api_calls import get_asset_by_id
 import logging
-from filelock import FileLock, Timeout
-from dateutil import parser
-# Initialize the logger
+
+
 logger = logging.getLogger(__name__)
-last_processed_time = 0  # Initialize the last processed time
-timestamp_diff_buffer = timedelta(days=5)
+last_processed_time = 0 
+
 
 
 def forecast(asset: AssetModel, asset_id):
-
+    set_forecast_status(asset, ForecastStatus.STARTING)
     process_lock = threading.Lock()
- 
-    tz = pytz.timezone("Europe/Berlin")
-    model_filename = (
-        f"/tmp/LSTM_model_{asset_id}_{asset.target_attribute}_{asset.forecast_length}.keras"
-    )
-    batch_size = 1  # Setting batch size to 1 for stateful LSTM
 
-    # Define the perform_forecast function
-    def perform_forecast():
-        global timestamp_diff_buffer
-        if os.path.exists(model_filename):
-            lock_file = model_filename + ".lock"
-            lock = FileLock(lock_file, timeout=1e6)
-            try:
-                with lock:
-                    processing_status = get_forecast_status(asset)
-                    if "Saving" in processing_status:
-                        logger.info(
-                            "Model is currently being saved in training. dont change status"
-                        )
-
-                    else:
-                        set_forecast_status(asset, ForecastStatus.RUNNING)
-                    logger.info(f"Loading existing model from {model_filename}")
-                    model = load_model(model_filename)
-                    loadState(model, asset)
-                    # Load the scaler
-                    scaler = load_scaler(asset)
-
-                    timestep_in_file = load_latest_timestamp(asset)
-                    timestep_in_file = parser.parse(timestep_in_file)
-                    
-
-                    new_end_date = datetime.now(tz)
-                    logger.info(f"timestep_in_file {timestep_in_file}")
-                    new_start_date = (
-                        timestep_in_file - timestamp_diff_buffer * 10
-                    ).astimezone(tz)
-
-                    logger.info(f"new_start_date {new_start_date}")
-                    logger.info(f"timestamp_diff_buffer {timestamp_diff_buffer}")
-
-                    df = fetch_pandas_data(
-                        asset_id,
-                        new_start_date,
-                        new_end_date,
-                        asset.target_attribute,
-                        asset.feature_attributes,
-                    )
-
-                    if df.empty:
-                        logger.info("No data fetched, skipping iteration.")
-                        return
-
-                    X_update, X_last, new_next_timestamp, last_y_timestamp = (
-                        prepare_data_for_forecast(
-                            asset,
-                            df,
-                            scaler,
-                            timestep_in_file,
-                        )
-                    )
-                    timestamp_diff_buffer = (
-                        new_next_timestamp - last_y_timestamp
-                    ) * asset.context_length
-                    logger.info("Latest timestamp updated.")
-                    logger.info("Prepared data")
-                    if X_update is None and X_last is None:
-                        logger.info("No new X sequences to process. Skipping...")
-                        return
-
-                    if len(X_update) > 0:
-                        logger.info(
-                            f"Updating model's state with {len(X_update)} new X sequences."
-                        )
-                        logger.info(
-                            f"First sequences from forecasting data: {X_update[:3]}"
-                        )
-                        model.summary()
-                        for i in range(len(X_update)):
-                            x = X_update[i].reshape(
-                                (1, asset.context_length, X_update.shape[2])
-                            )  # Shape: (1, context_length, features)
-                            _ = model.predict(
-                                x, batch_size=batch_size
-                            )  # Perform prediction to update state
-                        logger.info("Model's state updated with new X sequences.")
-
-                    # Forecast the next y using X_last
-                    if X_last is not None:
-                        logger.info(f"last x sequence: {X_last}")
-                        logger.info(
-                            "Forecasting the next value using the latest X sequence."
-                        )
-                        next_prediction_scaled = model.predict(
-                            X_last, batch_size=batch_size
-                        )
-                        # Format the prediction based on the type of task
-                        if asset.parameters.binary_encoding:
-                            # Binary classification
-                            predicted_class = next_prediction_scaled
-                            predicted_class_label = (
-                                1 if predicted_class[0][0] > 0.5 else 0
-                            )
-                            logger.info(
-                                f"Predicted class (binary): {predicted_class_label}"
-                            )
-                            formatted_prediction = predicted_class_label
-                        if asset.parameters.num_classes:
-                            # Multi-class classification
-                            logger.info(
-                                f"Raw probabilities (multi-class): {next_prediction_scaled[0]}"
-                            )
-                            predicted_class = np.argmax(
-                                next_prediction_scaled, axis=1
-                            )  # Class with highest probability
-                            logger.info(
-                                f"Predicted class (multi-class): {predicted_class[0]}"
-                            )
-                            formatted_prediction = predicted_class[0]
-                        else:
-                            # Regression
-                            next_prediction = scaler[asset.target_attribute].inverse_transform(
-                                next_prediction_scaled
-                            )
-                            logger.info(
-                                f"Next prediction (regression): {next_prediction[0][0]}"
-                            )
-                            formatted_prediction = next_prediction[0][0]
-
-                        logger.info(f"Predicted next timestamp: {new_next_timestamp}")
-
-                        # Write prediction into Eliona
-                        write_into_eliona(
-                            asset_id,
-                            new_next_timestamp,
-                            formatted_prediction,
-                            asset.target_attribute,
-                            asset.forecast_length,
-                        )
-
-                    else:
-                        logger.info("X_last is None. Skipping forecasting.")
-
-                    # Save the updated model after processing
-                    processing_status = get_forecast_status(asset)
-                    if "Saving" in processing_status:
-                        logger.info(
-                            "Model is currently being saved in training. Skipping saving."
-                        )
-                    else:
-                        save_latest_timestamp(last_y_timestamp, tz, asset)
-                        model.save(model_filename)
-                        saveState(model, asset)
-                        logger.info(f"Model saved to {model_filename}.")
-            except Timeout:
-                logger.error("Timeout occurred while trying to acquire the file lock.")
-                return
-        else:
-            logger.info(f"Model {model_filename} does not exist. Skipping iteration.")
-
-    # Now set up the WebSocket listener
     ELIONA_API_KEY = os.getenv("API_TOKEN")
     ELIONA_HOST = os.getenv("API_ENDPOINT")
 
@@ -206,7 +28,6 @@ def forecast(asset: AssetModel, asset_id):
         logger.info("Error: API_TOKEN or API_ENDPOINT environment variables not set.")
         return
 
-    # Ensure ELIONA_HOST uses wss:// and includes /api/v2
     if ELIONA_HOST.startswith("https://"):
         base_websocket_url = (
             ELIONA_HOST.replace("https://", "wss://").rstrip("/") + "/data-listener"
@@ -216,10 +37,8 @@ def forecast(asset: AssetModel, asset_id):
             ELIONA_HOST.replace("http://", "ws://").rstrip("/") + "/data-listener"
         )
     else:
-        # If no scheme is provided, assume 'ws://'
         base_websocket_url = "ws://" + ELIONA_HOST.rstrip("/") + "/data-listener"
 
-    # Build query parameters
     query_params = []
     if asset_id is not None:
         query_params.append(f"assetId={asset_id}")
@@ -228,48 +47,53 @@ def forecast(asset: AssetModel, asset_id):
     if query_params:
         base_websocket_url += "?" + "&".join(query_params)
 
-    # Build the headers for authentication using X-API-Key
     headers = [f"X-API-Key: {ELIONA_API_KEY}"]
-
-    # Reconnection logic variables
-    reconnect_delay = 1  # Initial delay in seconds
+    reconnect_delay = 1 
 
     while True:
-
-        logger.info("Connecting to WebSocket...")
-        websocket_url = base_websocket_url  # Reassign in case it changes
-        logger.info(f"WebSocket URL: {websocket_url}")
-        logger.info(f"Headers: {headers}")
-
+        
+        if not get_forecast_bool(asset):
+            set_forecast_status(asset, ForecastStatus.INACTIVE)
+            logger.info(f"Forecast bool for {asset.id} is false. Stopping forecast thread.")
+            break
+        websocket_url = base_websocket_url 
+        
         def on_message(ws, message):
-
+            set_forecast_status(asset, ForecastStatus.SIGNAL_RECIEVED)
             global last_processed_time
             current_time = time.time()
             with process_lock:
+                if not get_forecast_bool(asset):
+                    set_forecast_status(asset, ForecastStatus.INACTIVE)
+                    logger.info(f"Forecast bool for {asset.id} is false. Stopping forecast thread.")
+                    ws.close()  
+                    return
                 if (current_time - last_processed_time) >= 5:
                     last_processed_time = current_time
                     logger.info(f"Recieved message:{message}")
                     try:
                         if get_asset_by_id(id=asset.id) is None:
-                            logger.info("Asset does not exist")
+                            set_forecast_status(asset, ForecastStatus.ASSET_NOT_FOUND)
+                            logger.warning(f"Asset for {asset.id} does not exist")
                             sys.exit()
-                        perform_forecast()
+                        perform_forecast(asset, asset_id)
                     except Exception as e:
-                        logger.info(f"Error processing message: {e}")
+                        logger.exception("Error processing message {e}")
+                set_forecast_status(asset, ForecastStatus.WAITING_FOR_DATA)
 
         def on_error(ws, error):
-            logger.info(f"WebSocket error: {error}")
+            logger.warning(f"WebSocket {asset.id} error: {error}")
 
         def on_close(ws, close_status_code, close_msg):
-            logger.info(
-                f"WebSocket connection closed. Code: {close_status_code}, Message: {close_msg}"
+            logger.warning(
+                f"WebSocket connection for {asset.id} closed. Code: {close_status_code}, Message: {close_msg}"
             )
 
         def on_open(ws):
-            logger.info("WebSocket connection opened")
-            # Reset reconnection delay upon successful connection
+            set_forecast_status(asset, ForecastStatus.WAITING_FOR_DATA)
+            logger.info(f"WebSocket for {asset.id} connection opened")
             nonlocal reconnect_delay
-            reconnect_delay = 3  # Reset to initial delay
+            reconnect_delay = 3 
 
         ws = websocket.WebSocketApp(
             websocket_url,
@@ -279,8 +103,6 @@ def forecast(asset: AssetModel, asset_id):
             on_error=on_error,
             on_close=on_close,
         )
-
-        # SSL options to disable certificate verification if needed
         sslopt = {"cert_reqs": ssl.CERT_NONE}
 
         try:
@@ -289,9 +111,7 @@ def forecast(asset: AssetModel, asset_id):
             logger.info("WebSocket connection closed by user.")
             break
         except Exception as e:
-            logger.info(f"Exception occurred: {e}")
+            logger.info(f"Exception occurred in {asset.id}: {e}")
 
-        # Reconnection logic
-        logger.info(f"Reconnecting in {reconnect_delay} seconds...")
         time.sleep(reconnect_delay)
-        # Exponential backoff
+

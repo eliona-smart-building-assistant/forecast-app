@@ -1,34 +1,16 @@
 import tensorflow as tf
-from tensorflow.keras.layers import LSTM, Dense, Input
-from tensorflow.keras.models import Model
+from tensorflow.keras.layers import LSTM, Dense, Input, Dropout, BatchNormalization # type: ignore
+from tensorflow.keras.models import Model # type: ignore
 import json
-import logging
-
-# Initialize the logger
-logger = logging.getLogger(__name__)
-
 
 def build_lstm_model(
-    context_length, num_features, parameters  # Catch-all for additional parameters
+    context_length, num_features, parameters  
 ):
-    """
-    Builds a customizable multi-layer stateful LSTM model for time series forecasting or classification.
-
-    :param context_length: Number of timesteps used for context (input window)
-    :param num_features: Number of input features
-    :param parameters: Dictionary of additional hyperparameters
-    :return: Compiled LSTM model
-    """
-
-    from tensorflow.keras.layers import Dropout, BatchNormalization
-
     if isinstance(parameters, str):
         parameters = json.loads(parameters)
     elif not isinstance(parameters, dict):
         parameters = dict(parameters)
-
-    # Set default values
-    logger.info(f"parameters {parameters}")
+        
     num_lstm_layers = parameters.get("num_lstm_layers", 2)
     lstm_units = parameters.get("lstm_units", 50)
     activation = parameters.get("activation", "tanh")
@@ -46,11 +28,7 @@ def build_lstm_model(
     stateful = parameters.get("stateful", True)
     batch_size = parameters.get("batch_size", 1)
     binary_encoding = parameters.get("binary_encoding", False)
-    num_classes = parameters.get("num_classes", None)  # For multi-class classification
-
-    logger.info("all parameters:")
-    logger.info(f"binary_encoding {binary_encoding}")
-    logger.info(f"num_classes {num_classes}")
+    num_classes = parameters.get("num_classes", None) 
 
     inputs = Input(batch_shape=(batch_size, context_length, num_features))
     x = inputs
@@ -71,7 +49,6 @@ def build_lstm_model(
         if use_batch_norm:
             x = BatchNormalization()(x)
 
-        # Add Dense layers
         for _ in range(num_dense_layers):
             x = Dense(dense_units, activation=dense_activation)(x)
             if use_batch_norm:
@@ -79,26 +56,20 @@ def build_lstm_model(
             if dropout_rate > 0:
                 x = Dropout(dropout_rate)(x)
 
-    # Output layer
     if binary_encoding:
-        # Binary classification output
         outputs = Dense(1, activation="sigmoid")(x)
         loss = parameters.get("loss", "binary_crossentropy")
         metrics = parameters.get("metrics", ["accuracy"])
     elif num_classes is not None and num_classes > 1:
-        # Multi-class classification output
         outputs = Dense(num_classes, activation="softmax")(x)
         loss = parameters.get(
             "loss", "sparse_categorical_crossentropy"
-        )  # Use sparse categorical crossentropy
+        ) 
         metrics = parameters.get("metrics", ["accuracy"])
     else:
-        # Regression output (default)
         outputs = Dense(1)(x)
 
     model = Model(inputs, outputs)
-
-    # Select optimizer
     optimizer_mapping = {
         "adam": tf.keras.optimizers.Adam,
         "sgd": tf.keras.optimizers.SGD,
@@ -118,7 +89,6 @@ def build_lstm_model(
 
     optimizer = optimizer_class(**optimizer_kwargs)
 
-    # Compile the model
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics if metrics else [])
 
     return model

@@ -9,7 +9,6 @@ from eliona.api_client2 import (
 )
 import logging
 
-# Initialize the logger
 logger = logging.getLogger(__name__)
 host = os.getenv("API_ENDPOINT")
 api_key = os.getenv("API_TOKEN")
@@ -28,17 +27,16 @@ def get_asset_id_by_gai(gai):
                 return asset.id
         return asset.id
     except ApiException as e:
-        logger.info(f"Exception when calling AssetsApi->get_asset_by_gai: {e}")
+        logger.warning(f"Exception when calling AssetsApi->get_asset_by_gai for gai {gai}: {e}")
         return None
 
 
 def get_asset_type_name(asset_id):
     try:
-        logger.info(f"Asset ID: {asset_id}")
         asset = assets_api.get_asset_by_id(asset_id)
         return asset.asset_type
     except ApiException as e:
-        logger.info(f"Exception when calling AssetsApi->get_asset_by_id: {e}")
+        logger.warning(f"Exception when calling AssetsApi->get_asset_by_id for asset_id: {asset_id}: {e}")
         return None
 
 
@@ -49,38 +47,35 @@ def get_all_attribute_names(asset_type_name):
             asset_type_name, expansions=expansions
         )
         if hasattr(asset_type, "attributes"):
-            logger.info(asset_type)
             attribute_names = [attr.name for attr in asset_type.attributes]
             return attribute_names
         else:
-            logger.info("No attributes found for the asset type.")
+            logger.warning(f"No attributes found for the asset type: {asset_type_name}")
             return []
     except ApiException as e:
-        logger.info(
-            f"Exception when calling AssetTypesApi->get_asset_type_by_name: {e}"
+        logger.warning(
+            f"Exception when calling AssetTypesApi->get_asset_type_by_name for {asset_type_name}: {e}"
         )
         return []
 
 
 def get_all_attribute_info(asset_type_name):
     try:
-        # Correctly specify the expansion parameter to include attributes
         expansions = ["AssetType.attributes", "AssetType.asset_type_name"]
         asset_type = asset_types_api.get_asset_type_by_name(
             asset_type_name, expansions=expansions
         )
         if hasattr(asset_type, "attributes"):
-            # Extract the entire attribute information from each attribute in the list
             attribute_info = {
                 attr.name: attr.to_dict() for attr in asset_type.attributes
             }
             return attribute_info
         else:
-            logger.info("No attributes found for the asset type.")
+            logger.warning(f"No attributes found for the asset type: {asset_type_name}")
             return {}
     except ApiException as e:
-        logger.info(
-            f"Exception when calling AssetTypesApi->get_asset_type_by_name: {e}"
+        logger.warning(
+            f"Exception when calling AssetTypesApi->get_asset_type_by_name for {asset_type_name}: {e}"
         )
         return {}
 
@@ -88,35 +83,27 @@ def get_all_attribute_info(asset_type_name):
 def add_attribute_to_asset_type(asset_type_name, attribute_info):
     attribute = AssetTypeAttribute(**attribute_info)
     try:
-        api_response = asset_types_api.post_asset_type_attribute(
+        asset_types_api.post_asset_type_attribute(
             asset_type_name, attribute
         )
         logger.info(
             f"Successfully added attribute '{attribute.name}' to asset type '{asset_type_name}'."
         )
-        logger.info(f"{api_response}")
     except ApiException as e:
-        logger.info(
+        logger.warning(
             f"Exception when calling AssetTypesApi->post_asset_type_attribute: {e}"
         )
 
 
 def add_forecast_attributes(gai, attribute_to_forecast, forecast_name_suffix):
-    logger.info(f"Global Asset Identifier: {gai}")
     asset_id = get_asset_id_by_gai(gai)
     asset_type_name = get_asset_type_name(asset_id)
-    logger.info(f"Asset type name: {asset_type_name}")
-
     asset_type_all_attributes = get_all_attribute_names(asset_type_name)
-    logger.info(f"All attributes: {asset_type_all_attributes}")
-
     forecast_attribute = attribute_to_forecast + forecast_name_suffix
     if (
         attribute_to_forecast in asset_type_all_attributes
         and forecast_attribute not in asset_type_all_attributes
     ):
-        logger.info(f"Attribute to forecast: {forecast_attribute}")
-
         all_attribute_info = get_all_attribute_info(asset_type_name)
 
         if attribute_to_forecast in all_attribute_info:
@@ -124,28 +111,7 @@ def add_forecast_attributes(gai, attribute_to_forecast, forecast_name_suffix):
             forecast_attr_info["name"] = forecast_attribute
             forecast_attr_info["subtype"] = "output"
             forecast_attr_info["translation"] = None
-            logger.info(f"Forecast attribute info: {forecast_attr_info}")
             add_attribute_to_asset_type(asset_type_name, forecast_attr_info)
     return asset_id
 
 
-def add_forecast_attributes_to_all_assets(all_assets):
-    all_assets_with_id = []
-    for asset in all_assets:
-        # Accessing dictionary values using keys
-        forecast_name_suffix = f"_forecast_{asset['forecast_length']}"
-
-        # Assuming add_forecast_attributes returns asset_id
-        asset_id = add_forecast_attributes(
-            asset["gai"],
-            asset["target_attribute"],
-            forecast_name_suffix,
-        )
-
-        # Merge asset_id into the asset dictionary with the key 'id'
-        asset["asset_id"] = asset_id
-
-        # Append the updated asset dictionary
-        all_assets_with_id.append(asset)
-
-    return all_assets_with_id

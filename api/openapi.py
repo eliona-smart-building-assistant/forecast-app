@@ -16,15 +16,11 @@ from app.get_data.api_calls import set_forecast_bool, set_forecast_status, set_t
 from app.train_and_retrain.train_and_retrain import train_and_retrain
 from api.models import AssetModel, ForecastStatus, ModelModel, ThreadInfo, TrainingStatus
 import threading
+
 BASE_PATH = os.getenv("HYPERPARAMETER_SEARCH_PATH", "./hyperparameter_search")
-MODELS_DIR = "/tmp"
-
-DATABASE_URL = os.getenv(
-    "CONNECTION_STRING", "postgresql://user:password@localhost/dbname"
-)
-
+DATABASE_URL = os.getenv("CONNECTION_STRING", "postgresql://user:password@localhost/dbname")
 DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://")
-
+MODELS_DIR = "/tmp"
 
 def create_api(DATABASE_URL: str) -> FastAPI:
     engine = create_engine(DATABASE_URL)
@@ -35,7 +31,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     app = FastAPI(
         title="Forecast App API",
-        description="API to manage and query assets in the forecast schema, including hyperparameter search directories.",
+        description="API for managing forecsting assets and models.",
         version="1.0.0",
         openapi_url="/v1/version/openapi.json",
         openapi_version="3.1.0",
@@ -87,6 +83,9 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="No running forecast thread for this asset")
         asset = get_asset_by_id(id=id)
         set_forecast_bool(asset=asset, bool=False)
+        set_forecast_status(asset, ForecastStatus.STOPPING)
+        app.state.thread_map[id].forecast_running = False
+        return {"message": f"Signaled forecast thread for asset {id} to stop"}
         
         return {"message": f"Signaled forecast thread for asset {id} to stop"}
     @app.post("/v1/assets/{id}/train/start", response_model=dict)
@@ -119,7 +118,8 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="No running training thread for this asset")
         asset = get_asset_by_id(id=id)
         set_train_bool(asset=asset, bool=False)
-
+        # Reset the in-memory flag to indicate no training is running
+        app.state.thread_map[id].train_running = False
         return {"message": f"Signaled training thread for asset {id} to stop"}
 
     @app.get("/v1/models", response_model=List[ModelModel])
@@ -240,8 +240,8 @@ def create_api(DATABASE_URL: str) -> FastAPI:
     # API to create a new asset
     @app.post("/v1/assets", response_model=AssetModel)
     def create_asset(asset: AssetModel, db: Session = Depends(get_db)):
-        asset.forecast_status = ForecastStatus.NEW
-        asset.train_status = TrainingStatus.NEW
+        asset.forecast_status = ForecastStatus.INACTIVE
+        asset.train_status = TrainingStatus.INACTIVE
         db_asset = asset.to_db_model()
         db_asset.pop("id", None)
         

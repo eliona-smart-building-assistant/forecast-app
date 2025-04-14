@@ -5,8 +5,8 @@ from tensorflow.keras.layers import (
     Dropout,
     BatchNormalization,
 )
-from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import (
+from tensorflow.keras.models import Model # type: ignore
+from tensorflow.keras.optimizers import ( # type: ignore
     Adam,
     SGD,
     RMSprop,
@@ -20,7 +20,6 @@ import logging
 
 from api.models import HyperparametersModel, ParametersModel
 
-# Initialize the logger
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +33,6 @@ class LSTMHyperModel(HyperModel):
         self.hyperparameters: HyperparametersModel = self.validate_hyperparameters(hyperparameters)
 
     def validate_hyperparameters(self, hyperparameters):
-        logger.info(hyperparameters)
         if not hyperparameters:
             return {}
         if not isinstance(hyperparameters, dict):
@@ -44,31 +42,19 @@ class LSTMHyperModel(HyperModel):
             if params is None:
                 continue
             if isinstance(params, dict):
-                # For hp.Int and hp.Float
                 required_keys = {"min_value", "max_value", "step"}
                 if required_keys.issubset(params.keys()):
                     validated_hyperparameters[key] = params
-                else:
-                    logger.info(
-                        f"Warning: Hyperparameter '{key}' is missing required keys. Using standard values."
-                    )
             elif isinstance(params, list):
-                # For hp.Choice
                 validated_hyperparameters[key] = params
             elif isinstance(params, bool):
-                # For hp.Boolean
                 validated_hyperparameters[key] = params
-            else:
-                logger.info(
-                    f"Warning: Hyperparameter '{key}' has an unsupported format. Using standard values."
-                )
+
         return validated_hyperparameters
 
     def build(self, hp):
         inputs = Input(batch_shape=(1, self.context_length, self.num_features))
         x = inputs
-
-        # For Choice hyperparameters, use defaults if empty
         activation_choices = self.hyperparameters.get("activation") or ["tanh", "relu", "sigmoid", "linear"]
         activation = hp.Choice("activation", values=activation_choices)
 
@@ -79,7 +65,7 @@ class LSTMHyperModel(HyperModel):
         num_lstm_layers = hp.Int(
             "num_lstm_layers",
             min_value=num_lstm_layers_params.get("min_value", 1),
-            max_value=num_lstm_layers_params.get("max_value", 4),
+            max_value=num_lstm_layers_params.get("max_value", 3),
             step=num_lstm_layers_params.get("step", 1),
         )
 
@@ -95,7 +81,7 @@ class LSTMHyperModel(HyperModel):
         dropout_rate = hp.Float(
             "dropout_rate",
             min_value=dropout_rate_params.get("min_value", 0.0),
-            max_value=dropout_rate_params.get("max_value", 0.5),
+            max_value=dropout_rate_params.get("max_value", 0.7),
             step=dropout_rate_params.get("step", 0.1),
         )
 
@@ -103,7 +89,7 @@ class LSTMHyperModel(HyperModel):
         recurrent_dropout_rate = hp.Float(
             "recurrent_dropout_rate",
             min_value=recurrent_dropout_rate_params.get("min_value", 0.0),
-            max_value=recurrent_dropout_rate_params.get("max_value", 0.5),
+            max_value=recurrent_dropout_rate_params.get("max_value", 0.7),
             step=recurrent_dropout_rate_params.get("step", 0.1),
         )
 
@@ -126,7 +112,7 @@ class LSTMHyperModel(HyperModel):
         learning_rate_params = self.hyperparameters.get("learning_rate", {})
         learning_rate = hp.Float(
             "learning_rate",
-            min_value=learning_rate_params.get("min_value", 1e-4),
+            min_value=learning_rate_params.get("min_value", 1e-5),
             max_value=learning_rate_params.get("max_value", 1e-2),
             sampling="log",
         )
@@ -136,7 +122,6 @@ class LSTMHyperModel(HyperModel):
 
         use_batch_norm = hp.Boolean("use_batch_norm", default=self.hyperparameters.get("use_batch_norm", False))
 
-        # Use attribute access on self.parameters (which is now a ParametersModel)
         binary_encoding = self.parameters.binary_encoding
         num_classes = self.parameters.num_classes
 
@@ -169,7 +154,6 @@ class LSTMHyperModel(HyperModel):
             loss = "sparse_categorical_crossentropy"
         else:
             outputs = Dense(1)(x)
-            # Use attribute on model: if loss is not provided then fall back to MSE
             loss = self.parameters.loss if self.parameters.loss is not None else "mean_squared_error"
 
         model = Model(inputs, outputs)

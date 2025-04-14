@@ -31,32 +31,33 @@ def database_setup():
 
 def get_asset_by_id(id: int) -> AssetModel:
     SessionLocal, Asset = database_setup()
-    logging.info(f"Fetching asset with ID {id}")
-
-    with SessionLocal() as session:
+    session = SessionLocal()
+    try:
         query = Asset.select().where(Asset.c.id == id)
         result = session.execute(query).first()
         if result is None:
             logging.warning(f"Asset with ID {id} not found.")
             return None
         return AssetModel.from_orm(result)
-
+    except Exception as e:
+        logging.exception(f"Error fetching asset ID {id}")
+        raise e
+    finally:
+        session.close()
 
 
 def update_asset(id: int, **kwargs):
-    logging.info(f"Updating asset with ID {id}")
     SessionLocal, Asset = database_setup()
-    
-    # Filter update_values to only use keys from the table columns.
     update_values = {
         key: value for key, value in kwargs.items()
         if value is not None and key in Asset.c
     }
     if not update_values:
-        logging.warning(f"No valid values provided to update for asset ID {id}")
+        logging.warning(f"No valid values provided to update for asset ID {id}, got: {kwargs}")
         return
 
-    with SessionLocal() as session:
+    session = SessionLocal()
+    try:
         db_asset = session.execute(Asset.select().where(Asset.c.id == id)).first()
         if db_asset is None:
             raise ValueError(f"Asset with ID {id} not found.")
@@ -68,6 +69,9 @@ def update_asset(id: int, **kwargs):
         )
         session.execute(update_query)
         session.commit()
-        logging.info(f"Asset with ID {id} updated successfully.")
-
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
 
