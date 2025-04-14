@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Forecast App API
-  description: API to manage and query assets in the forecast schema, including hyperparameter search directories.
+  description: API for managing forecasting assets and models, including hyperparameter search directories and asynchronous forecast/training tasks.
   version: 1.0.0
 servers:
   - url: "https://{server}/v1"
@@ -13,6 +13,102 @@ servers:
       environment:
         default: name
 paths:
+  /assets/{id}/forecast/start:
+    post:
+      summary: Start forecast
+      description: Starts a forecasting thread for a given asset.
+      operationId: start_forecast
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Forecast thread started successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Forecast is already running for this asset.
+        '404':
+          description: Asset not found.
+  /assets/{id}/forecast/stop:
+    post:
+      summary: Stop forecast
+      description: Signals the forecast thread for the specified asset to stop.
+      operationId: stop_forecast
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Forecast thread stop signal sent successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: No running forecast thread for this asset.
+  /assets/{id}/train/start:
+    post:
+      summary: Start training
+      description: Starts a training thread for a given asset.
+      operationId: start_training
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Training thread started successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Training is already running for this asset.
+        '404':
+          description: Asset not found.
+  /assets/{id}/train/stop:
+    post:
+      summary: Stop training
+      description: Signals the training thread for the specified asset to stop.
+      operationId: stop_training
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Training thread stop signal sent successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: No running training thread for this asset.
   /hyperparameter_search/{directory_name}:
     delete:
       summary: Delete hyperparameter search directory
