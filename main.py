@@ -4,7 +4,6 @@ import uvicorn
 import logging
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
