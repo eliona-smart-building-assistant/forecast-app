@@ -118,7 +118,6 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="No running training thread for this asset")
         asset = get_asset_by_id(id=id)
         set_train_bool(asset=asset, bool=False)
-        # Reset the in-memory flag to indicate no training is running
         app.state.thread_map[id].train_running = False
         return {"message": f"Signaled training thread for asset {id} to stop"}
 

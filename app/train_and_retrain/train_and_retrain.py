@@ -75,7 +75,7 @@ def train_and_retrain(asset: AssetModel):
                 asset.target_attribute,
                 asset.feature_attributes,
             )
-            required_min_length = asset.context_length + asset.forecast_length * 2
+            required_min_length = (asset.context_length + asset.forecast_length) * 20
             if len(df) < required_min_length:
                 set_training_status(asset, f"Not enough data for training, required: {required_min_length}, available: {len(df)}")
                 time.sleep(asset.trainingparameters.sleep_time)
