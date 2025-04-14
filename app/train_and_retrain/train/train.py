@@ -39,8 +39,9 @@ def train_lstm_model(
 
     
     data_length = int(len(X) * asset.hyperparameters.percent_data)
-    X_hyper = X[data_length:]
-    y_hyper = y[data_length:]
+    data_length_to_exclude = int(len(X) * (1- asset.hyperparameters.percent_data))
+    X_hyper = X[data_length_to_exclude:]
+    y_hyper = y[data_length_to_exclude:]
     validation_samples = int(len(X_hyper) * asset.trainingparameters.validation_split)
     if validation_samples == 0:
         logger.info(f"Validation split results in 0 validation samples. Skipping training for {asset.id}.")
@@ -102,8 +103,8 @@ def train_lstm_model(
     best_hyperparameters_list = tuner.get_best_hyperparameters(num_trials=top_n)
     best_models = tuner.get_best_models(num_models=top_n)
 
-    test_data_start = data_length
-    test_data_end = data_length * 2
+    test_data_start = data_length_to_exclude - data_length
+    test_data_end = data_length_to_exclude
 
     if len(X) >= test_data_end:
         X_test_hyper = X[test_data_start:test_data_end]
