@@ -12,7 +12,7 @@ def start_api():
     port = int(os.getenv("API_SERVER_PORT", 3000))
     uvicorn.run("api.openapi:app", host="0.0.0.0", port=port)
 
-
+print("Startup message")
 db.create_schema_and_table()
 logger.info("Database schema and table created.")
 Initialize()
