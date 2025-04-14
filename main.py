@@ -15,6 +15,6 @@ def start_api():
 if __name__ == "__main__":
     db.create_schema_and_table()
     logger.info("Database schema and table created.")
-    # register_app.Initialize()
+    register_app.Initialize()
     logger.info("App initialized.")
     start_api()
