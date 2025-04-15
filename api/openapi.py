@@ -91,6 +91,7 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         return {"message": f"Signaled forecast thread for asset {id} to stop"}
         
         return {"message": f"Signaled forecast thread for asset {id} to stop"}
+   
     @app.post("/v1/assets/{id}/train/start", response_model=dict)
     def start_training(id: int, db: Session = Depends(get_db)):
         existing_asset = db.execute(Asset.select().where(Asset.c.id == id)).first()
@@ -98,14 +99,20 @@ def create_api(DATABASE_URL: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="Asset not found")
 
         asset_model = AssetModel.from_orm(existing_asset)
+
+        # First remove thread_map entry if training is inactive; otherwise check train_running
+        if id in app.state.thread_map:
+            if not asset_model.train or asset_model.train_status == ForecastStatus.INACTIVE:
+                del app.state.thread_map[id]
+            else:
+                if app.state.thread_map[id].train_running:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Training is already running for this asset"
+                    )
+
         if id not in app.state.thread_map:
             app.state.thread_map[id] = ThreadInfo()
-        if id in app.state.thread_map:
-            if (not asset_model.train) or (asset_model.train_status== ForecastStatus.INACTIVE):
-                del app.state.thread_map[id]
-        if app.state.thread_map[id].train_running:
-            raise HTTPException(status_code=400, detail="Training is already running for this asset")
-  
 
         train_thread = threading.Thread(target=train_and_retrain, args=(asset_model,))
         train_thread.start()
@@ -113,7 +120,6 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         app.state.thread_map[id].train_running = True
         app.state.thread_map[id].train_thread_id = train_thread.ident
         set_train_bool(asset=asset_model, bool=True)
-
 
         return {"message": f"Started training thread for asset {id}"}
 
