@@ -59,7 +59,10 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         if existing_asset is None:
             raise HTTPException(status_code=404, detail="Asset not found")
         asset_model = AssetModel.from_orm(existing_asset)
-
+        
+        if id in app.state.thread_map:
+            if (not asset_model.forecast) or (asset_model.forecast_status == ForecastStatus.INACTIVE):
+                del app.state.thread_map[id]
         if id not in app.state.thread_map:
             app.state.thread_map[id] = ThreadInfo()
         
@@ -93,14 +96,16 @@ def create_api(DATABASE_URL: str) -> FastAPI:
         existing_asset = db.execute(Asset.select().where(Asset.c.id == id)).first()
         if existing_asset is None:
             raise HTTPException(status_code=404, detail="Asset not found")
-        asset_dict = dict(existing_asset._mapping)
 
+        asset_model = AssetModel.from_orm(existing_asset)
         if id not in app.state.thread_map:
             app.state.thread_map[id] = ThreadInfo()
-
+        if id in app.state.thread_map:
+            if (not asset_model.train) or (asset_model.train_status== ForecastStatus.INACTIVE):
+                del app.state.thread_map[id]
         if app.state.thread_map[id].train_running:
             raise HTTPException(status_code=400, detail="Training is already running for this asset")
-        asset_model = AssetModel.from_orm(existing_asset)
+  
 
         train_thread = threading.Thread(target=train_and_retrain, args=(asset_model,))
         train_thread.start()
