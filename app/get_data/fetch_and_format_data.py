@@ -277,28 +277,26 @@ def prepare_data_for_forecast(
         start_index = 0
 
     X_new = []
-    target_timestamps = []
-
-    for i in range(start_index, len(scaled_data) - asset.context_length):
+    for i in range(start_index, len(scaled_data) - asset.context_length + 1):
         x = scaled_data[all_attributes].iloc[i : i + asset.context_length].values
         X_new.append(x)
-        timestamp = data["timestamp"].iloc[i + asset.context_length]
-        target_timestamps.append(timestamp)
 
-    if not X_new:
+    if not X_new:                         # nothing new → bail out early
         logger.info(f"No valid input sequences found after filtering for {asset.id}")
         return None, None, None, None
 
-    X_new = np.array(X_new) 
+    X_new = np.array(X_new)
 
+    # --- split into “state-update” and “real forecast” ------------------------
     if len(X_new) > 1:
-        X_update = X_new[:-1]
-        X_last = X_new[-1].reshape((1, asset.context_length, len(all_attributes)))
-        last_y_timestamp_new = target_timestamps[-1]
+        X_update = X_new[:-1]             # keep state warm
     else:
         X_update = np.empty((0, asset.context_length, len(all_attributes)))
-        X_last = X_new[-1].reshape((1, asset.context_length, len(all_attributes)))
-        last_y_timestamp_new = target_timestamps[-1]
+
+    X_last = X_new[-1].reshape((1, asset.context_length, len(all_attributes)))
+
+    # timestamp of the last observed target value
+    last_y_timestamp_new = data["timestamp"].iloc[-1]
 
     if len(data) >= 2:
         timestamp_diffs = data["timestamp"].diff().dropna()
