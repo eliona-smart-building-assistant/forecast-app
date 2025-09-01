@@ -17,10 +17,12 @@ def train_and_retrain(asset: AssetModel):
     tz = pytz.timezone("Europe/Berlin")
     start_date = tz.localize(datetime.strptime(asset.start_date, "%Y-%m-%d"))
     forecast_name_suffix = f"_forecast_{asset.forecast_length}"
+    forecast_name_suffix_ts = f"{forecast_name_suffix}_ts"
 
     try:
         set_training_status(asset, TrainingStatus.ADD_FORECAST_ATTRIBUTES)
         asset_id = add_forecast_attributes(asset.gai, asset.target_attribute, forecast_name_suffix)
+        add_forecast_attributes(asset.gai, asset.target_attribute, forecast_name_suffix_ts)
     except Exception as e:
         logger.error(f"Error computing asset_id: {e}")
         sys.exit(1)

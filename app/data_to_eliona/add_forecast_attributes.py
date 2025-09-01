@@ -109,7 +109,7 @@ def add_forecast_attributes(gai, attribute_to_forecast, forecast_name_suffix):
         if attribute_to_forecast in all_attribute_info:
             forecast_attr_info = all_attribute_info[attribute_to_forecast]
             forecast_attr_info["name"] = forecast_attribute
-            forecast_attr_info["subtype"] = "output"
+            forecast_attr_info["subtype"] = "input"
             forecast_attr_info["translation"] = None
             add_attribute_to_asset_type(asset_type_name, forecast_attr_info)
     return asset_id
